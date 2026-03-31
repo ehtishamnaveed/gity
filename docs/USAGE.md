@@ -6,142 +6,212 @@
 gity
 ```
 
-You'll see the main menu immediately. From there, browse, clone, or create repos.
+## Main Menu Overview
+
+Gity's main menu provides quick access to all features:
+
+```
+╔═══════════════════════════════════════════════════╗
+║           GITY - TUI Git Hub                      ║
+╚═══════════════════════════════════════════════════╝
+
+📊 Dashboard (Repos Needing Work)
+📂 Browse All Repositories
+📅 Activity Timeline
+🕰️ Stale Repos
+🌿 Branch Health
+⚡ Bulk Actions
+🔍 Search Across Repos
+🐙 GitHub Repos
+🔗 Clone Repository
+✨ Create New Repository
+🔄 Refresh Cache
+❌ Exit
+```
 
 ---
 
-## First Time Setup
+## Visualization Features
 
-Gity will automatically scan your system on first run. This may take a few seconds depending on how many directories you have. The results are cached for faster subsequent launches.
+### 📊 Dashboard (Repos Needing Work)
 
-### Scan Locations
+The dashboard provides an at-a-glance view of all your repos, categorized by urgency:
 
-Gity searches these directories by default:
-- `~/Work`
-- `~/Plugins`
-- `~/Documents`
-- `~/Desktop`
-- `~/Luminor`
-- General `~` (excluding cache directories)
+```
+╔════════════════════════════════════════════════════════════╗
+║                 📊 REPOS NEEDING ATTENTION               ║
+╠════════════════════════════════════════════════════════════╣
+║  Total: 12 repos scanned
+╠════════════════════════════════════════════════════════════╣
+║  🔴 CRITICAL (2 repos)
+║  
+║    ✎ ultra-fast-carousel    3 file(s) changed
+║    ↕ dynamicleo            3↑, 2↓
+╠════════════════════════════════════════════════════════════╣
+║  🟡 WARNINGS (1 repos)
+║  
+║    ↑ wordpress-manager      2 commit(s) ahead
+╠════════════════════════════════════════════════════════════╣
+║  🟢 HEALTHY (9 repos)
+║  
+║    ● gity                  All synced
+║    ● terraform-config       All synced
+╚════════════════════════════════════════════════════════════╝
+```
 
-To customize which directories are scanned, edit `gity.sh` and modify the `find` commands in the `refresh_cache()` function.
+**Legend:**
+- `●` Clean — nothing to commit
+- `✎` Changes — uncommitted changes
+- `↑` Ahead — commits to push
+- `↓` Behind — commits to pull
+- `↕` Diverged — both ahead and behind
 
 ---
 
-## Main Menu Options
+### 📅 Activity Timeline
+
+View your recent work across all repos:
+
+```
+╔════════════════════════════════════════════════════════════╗
+║              📅 ACTIVITY TIMELINE                       ║
+║              (Last 7 days)                             ║
+╠════════════════════════════════════════════════════════════╣
+║  Today
+║    gity           fix: menu mismatch
+║    gity           add: bulk actions feature
+║    dynamicleo     Enhancement: Hero animations
+╠════════════════════════════════════════════════════════════╣
+║  Yesterday
+║    wordpress      add: plugin installer
+║    plugins-repo   chore: update deps
+╠════════════════════════════════════════════════════════════╣
+║  Mar 25
+║    terraform      fix: bucket permissions
+╚════════════════════════════════════════════════════════════╝
+```
+
+**Keyboard shortcuts:**
+- `1` — Last day
+- `7` — Last week (default)
+- `30` — Last month
+
+---
+
+### 🕰️ Stale Repos
+
+Find abandoned projects you forgot about:
+
+```
+╔════════════════════════════════════════════════════════════╗
+║                  🕰️ STALE REPOS                        ║
+╠════════════════════════════════════════════════════════════╣
+║  ⚠️ Stale/Abandoned repos (5)
+║  
+║    ⚠️  180 days   old-experiment    "initial commit"
+║    🔴   90 days   demo-app-2024     "add feature x"
+║    🔴   60 days   scratch-notes     "update readme"
+║    🟡   45 days   antigravity       "fix build"
+║    🟡   35 days   random-scripts    "cleanup"
+╠════════════════════════════════════════════════════════════╣
+║  Active/Recent: 7 repos
+╚════════════════════════════════════════════════════════════╝
+```
+
+**Thresholds:**
+- `🟡 Yellow` — 30-60 days inactive
+- `🔴 Red` — 60-90 days inactive
+- `⚠️ Dark Red` — 90+ days abandoned
+
+---
+
+### 🌿 Branch Health
+
+Check the state of branches across all repos:
+
+```
+╔════════════════════════════════════════════════════════════╗
+║                  🌿 BRANCH HEALTH                      ║
+╠════════════════════════════════════════════════════════════╣
+║  🟢 gity              3 branches  •  master
+║  🟡 dynamicleo        8 branches  •  ehtisham/design
+║      • 3 stale branches
+║  🟢 ultra-fast-carousel  1 branch  •  master
+║  🔴 terraform-config   12 branches •  main
+║      • 7 stale branches
+╚════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Core Features
 
 ### Browse All Repositories
-Opens a searchable list of all discovered Git repos. Recent repos appear at the top. Use fuzzy search to filter by name or path.
+
+Opens a searchable list of all discovered Git repos with **status indicators**. Recent repos appear at the top.
+
+### Search Across Repos
+
+Search for any text or file across all your repositories at once:
+
+1. Enter your search query
+2. Gity greps through every repo
+3. Results show file path and matching line
+4. Select a result to open that repo directly
+
+### Bulk Actions
+
+Select multiple repos and perform actions on all of them at once:
+
+1. **Select repos** — Use `Tab` to multi-select
+2. **Choose action:**
+   - **Pull All** — `git pull` on each repo
+   - **Push All** — `git push` on each repo
+   - **Status All** — View git status
+   - **Commit All** — Add and commit with one message
+   - **Custom Command** — Run any command (use `{repo}` for path)
+
+### GitHub Integration
+
+Browse and clone repositories from your GitHub account:
+
+1. Requires `gh` CLI (`brew install gh` or from cli.github.com)
+2. Authenticate with `gh auth login`
+3. Browse your top 100 repos
+4. Clone directly or open in browser
 
 ### Clone Repository
-Prompts for a Git URL (HTTPS or SSH). Clones into `~/Documents/Github/<repo-name>`. After cloning, you'll be taken to the repo actions menu.
+
+Prompts for a Git URL (HTTPS or SSH). Clones into `~/Documents/Github/<repo-name>`.
 
 ### Create New Repository
-Prompts for a name. Creates the directory, initializes a Git repo, adds a blank `README.md`, and makes an initial commit. Then takes you to the repo actions menu.
 
-### Exit
-Quits Gity.
+Prompts for a name. Creates the directory, initializes Git, adds `README.md`, and makes initial commit.
+
+### Refresh Cache
+
+Rescans your home directory for new Git repositories.
 
 ---
 
 ## Repository Actions
 
-After selecting a repo (either by browsing or after clone/create), you can:
+After selecting a repo:
 
 ### Open in Lazygit (TUI)
-Launches `lazygit` pointed at that repository. This is the main workflow — browse commits, stage files, resolve merge conflicts, and more.
+Launches `lazygit` pointed at that repository.
 
 ### Browse Files (fzf)
-Opens a fuzzy-searchable file browser for the repository. Use arrow keys to navigate, press **Enter** to preview a file, and **Escape** to go back. This shows ALL files in the repo, regardless of whether there are uncommitted changes.
+Opens a fuzzy-searchable file browser. Shows ALL files in the repo.
 
 ### Open in Default Editor
-Opens the repository using your system's default editor. Uses `$EDITOR` if set, otherwise falls back to your platform's default:
-- Linux: `xdg-open`
-- macOS: `open`
-- Windows (WSL/Git Bash): `wslview`, `explorer.exe`, or `start`
+Uses `$EDITOR` if set, otherwise platform default.
 
 ### Open in File Manager
-Opens the repository folder in your system's default file browser (uses `xdg-open`).
+Opens in your system's file browser.
 
 ### Copy Path to Clipboard
-Copies the full path of the repository. Requires a clipboard tool (`xclip`, `xsel`, or `wl-copy` on Wayland). If none are available, this option is hidden.
-
----
-
-## Cache Management
-
-Gity caches the list of repos in `~/.cache/lazygit_repos`. The cache is automatically refreshed when:
-- The cache file is empty or missing
-- A new repo is cloned or created through Gity
-
-To force a rescan, simply delete the cache file:
-
-```bash
-rm ~/.cache/lazygit_repos
-```
-
-The next time you run Gity, it will rescan.
-
----
-
-## Customization
-
-### Clone Destination
-By default, cloned repos go to `~/Documents/Github`. Change this by editing the `REPO_DIR` variable in `gity.sh`:
-
-```bash
-REPO_DIR="$HOME/path/to/your/repos"
-```
-
-### Repo Scan Locations
-To add or remove directories from the scan, edit `gity.sh`:
-
-```bash
-find "$HOME/Work" "$HOME/Plugins" "$HOME/Documents" ... -maxdepth 4 -name ".git" -type d
-```
-
-### Number of Recent Repos
-Recent repos are limited to 10 by default. Change this in `repo_actions()`:
-
-```bash
-head -n 10   # change 10 to desired number
-```
-
----
-
-## Troubleshooting
-
-### "lazygit not found"
-Gity requires lazygit to be installed. Install it via your package manager:
-
-```bash
-# Arch
-sudo pacman -S lazygit
-
-# Ubuntu/Debian
-sudo apt install lazygit
-
-# Fedora
-sudo dnf install lazygit
-```
-
-### "fzf not found"
-Same as above — `fzf` is required. Install it with your package manager.
-
-### Clipboard not working
-If the "Copy Path" option is missing or not working, install one of:
-- `xclip` (X11)
-- `xsel` (X11 alternative)
-- `wl-copy` (Wayland)
-
-### Gity not found after install
-Make sure `~/.local/bin` is in your PATH:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-Add this to `~/.bashrc` or `~/.zshrc` to make it permanent.
+Copies the repo path (requires `xclip`/`xsel`/`wl-copy`).
 
 ---
 
@@ -151,6 +221,64 @@ Add this to `~/.bashrc` or `~/.zshrc` to make it permanent.
 |---|---|
 | `↑` / `↓` or `j` / `k` | Navigate options |
 | `Enter` | Select |
-| `Escape` | Go back / Cancel |
-| `Ctrl+C` | Exit |
+| `Escape` | Go back |
+| `Tab` | Multi-select (Bulk Actions) |
+| `Q` | Quit (in visualization views) |
+| `R` | Refresh (Dashboard) |
+| `1/7/30` | Timeline timeframe |
 | Type | Fuzzy search filter |
+
+---
+
+## Troubleshooting
+
+### "lazygit not found"
+```bash
+# Arch
+sudo pacman -S lazygit
+# Ubuntu
+sudo apt install lazygit
+# macOS
+brew install lazygit
+```
+
+### "fzf not found"
+```bash
+# Arch
+sudo pacman -S fzf
+# Ubuntu
+sudo apt install fzf
+# macOS
+brew install fzf
+```
+
+### Clipboard not working
+Install `xclip` (X11), `xsel`, or `wl-copy` (Wayland).
+
+### GitHub Repos not working
+```bash
+gh auth status    # Check authentication
+gh auth login     # If not logged in
+```
+
+---
+
+## Customization
+
+### Clone Destination
+Edit `gity.sh`:
+```bash
+REPO_DIR="$HOME/path/to/your/repos"
+```
+
+### Scan Directories
+Edit the `find` commands in `gity.sh`:
+```bash
+find "$HOME/Work" "$HOME/Plugins" ... -maxdepth 4
+```
+
+### Recent Repos Limit
+In `repo_actions()`, change:
+```bash
+head -n 10   # default is 10
+```
