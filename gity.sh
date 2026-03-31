@@ -1023,32 +1023,33 @@ merge_branch() {
         return
     fi
     
-    local current_branch
-    current_branch=$(git -C "$selected_repo" branch --show-current)
-    if [ -z "$current_branch" ]; then
-        echo -e "${RED}Detached HEAD state. Cannot merge.${NC}"
+    local all_branches
+    all_branches=$(git -C "$selected_repo" branch --format='%(refname:short)')
+    
+    if [ -z "$all_branches" ]; then
+        echo -e "${RED}No branches found in this repository!${NC}"
         sleep 2
         return
     fi
     
-    local branches
-    branches=$(git -C "$selected_repo" branch --format='%(refname:short)' | grep -v "^${current_branch}$")
+    echo "$all_branches" | wc -l | grep -q "^[[:space:]]*1$" && echo -e "${YELLOW}Only one branch exists. Nothing to merge.${NC}" && sleep 2 && return
     
-    if [ -z "$branches" ]; then
-        echo -e "${YELLOW}No other branches to merge.${NC}"
-        sleep 2
+    local target_branch
+    target_branch=$(echo "$all_branches" | fzf --height 60% --border --header="STEP 1: Select branch to merge INTO" --prompt="Merge INTO > " || true)
+    
+    if [ -z "$target_branch" ]; then
         return
     fi
     
-    local branch_to_merge
-    branch_to_merge=$(echo "$branches" | fzf --height 60% --border --header="Current: ${YELLOW}${current_branch}${NC}  →  Select branch to merge into" --prompt="Merge > " || true)
+    local source_branch
+    source_branch=$(echo "$all_branches" | grep -v "^${target_branch}$" | fzf --height 60% --border --header="STEP 2: Select branch to merge (source)" --prompt="Merge > " || true)
     
-    if [ -z "$branch_to_merge" ]; then
+    if [ -z "$source_branch" ]; then
         return
     fi
     
     local revs
-    revs=$(git -C "$selected_repo" rev-list --left-right --count "${current_branch}...${branch_to_merge}" 2>/dev/null || echo "0 0")
+    revs=$(git -C "$selected_repo" rev-list --left-right --count "${target_branch}...${source_branch}" 2>/dev/null || echo "0 0")
     local commits_behind
     commits_behind=$(echo "$revs" | awk '{print $1}')
     local commits_ahead
@@ -1064,8 +1065,8 @@ merge_branch() {
     echo ""
     echo -e "  ${DIM}Repository: ${BOLD}$(basename "$selected_repo")${NC}"
     echo ""
-    echo -e "  ${GREEN}Merge:${NC}     ${branch_to_merge}"
-    echo -e "  ${YELLOW}Into:${NC}      ${current_branch}"
+    echo -e "  ${GREEN}Merge:${NC}     ${source_branch}"
+    echo -e "  ${YELLOW}Into:${NC}      ${target_branch}"
     echo ""
     
     if [ "$diverged" -eq 1 ]; then
@@ -1075,11 +1076,11 @@ merge_branch() {
     fi
     
     if [ "$commits_behind" -gt 0 ]; then
-        echo -e "  ${CYAN}📥 ${branch_to_merge} is ${commits_behind} commit(s) ahead${NC}"
+        echo -e "  ${CYAN}📥 ${source_branch} is ${commits_behind} commit(s) ahead${NC}"
     fi
     
     if [ "$commits_ahead" -gt 0 ]; then
-        echo -e "  ${MAGENTA}📤 ${current_branch} is ${commits_ahead} commit(s) ahead${NC}"
+        echo -e "  ${MAGENTA}📤 ${target_branch} is ${commits_ahead} commit(s) ahead${NC}"
     fi
     
     if [ "$commits_ahead" -eq 0 ] && [ "$commits_behind" -eq 0 ]; then
@@ -1089,9 +1090,9 @@ merge_branch() {
     fi
     
     echo ""
-    echo -e "${DIM}  Recent commits in ${branch_to_merge}:${NC}"
+    echo -e "${DIM}  Recent commits in ${source_branch}:${NC}"
     echo -e "${DIM}  ─────────────────────────────────────${NC}"
-    git -C "$selected_repo" log "${branch_to_merge}" --oneline -5 | sed 's/^/    /'
+    git -C "$selected_repo" log "${source_branch}" --oneline -5 | sed 's/^/    /'
     echo ""
     echo -e "${BLUE}╔════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║${NC}  Are you sure you want to merge?               ${BLUE}║${NC}"
@@ -1108,10 +1109,10 @@ merge_branch() {
     fi
     
     echo ""
-    echo -e "${BLUE}Merging ${branch_to_merge} into ${current_branch}...${NC}"
+    echo -e "${BLUE}Merging ${source_branch} into ${target_branch}...${NC}"
     echo ""
     
-    if git -C "$selected_repo" merge "${branch_to_merge}" --no-edit 2>&1; then
+    if git -C "$selected_repo" checkout "${target_branch}" 2>&1 && git -C "$selected_repo" merge "${source_branch}" --no-edit 2>&1; then
         echo ""
         echo -e "${GREEN}✅ Merge successful!${NC}"
         echo ""
