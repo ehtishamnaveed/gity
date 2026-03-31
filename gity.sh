@@ -1010,44 +1010,21 @@ merge_branch() {
         refresh_cache
     fi
     
-    local repos
-    repos=$(cat "$CACHE_FILE")
-    
-    if [ -z "$repos" ]; then
-        echo -e "${YELLOW}No repositories found. Run Refresh Cache first.${NC}"
-        sleep 2
-        return
-    fi
-    
     local selected_repo
-    selected_repo=$(echo "$repos" | while IFS= read -r repo; do
-        if [ -d "$repo/.git" ]; then
-            local name
-            name=$(basename "$repo")
-            local rel_path
-            rel_path="${repo#$HOME/}"
-            echo "${BOLD}${name}${NC}  ${DIM}~/${rel_path}${NC}"
-        fi
-    done | fzf --height 60% --border --header="Select repository to merge branches" --prompt="Select repo > " || true)
+    selected_repo=$( (cat "$RECENT_FILE"; cat "$CACHE_FILE") | awk 'NF && !x[$0]++' | fzf --height 60% --border --header="Select repository to merge branches" --prompt="Select repo > " || true)
     
     if [ -z "$selected_repo" ]; then
         return
     fi
     
-    local repo_name
-    repo_name=$(echo "$selected_repo" | sed 's/^[[:space:]]*//' | awk '{print $1}')
-    
-    local repo_path
-    repo_path=$(grep -F "/${repo_name}" "$CACHE_FILE" | awk -F/ '{if ($NF == "'"${repo_name}"'") print}' | head -1)
-    
-    if [ ! -d "$repo_path/.git" ]; then
+    if [ ! -d "$selected_repo/.git" ]; then
         echo -e "${RED}Not a valid git repository!${NC}"
         sleep 2
         return
     fi
     
     local current_branch
-    current_branch=$(git -C "$repo_path" branch --show-current)
+    current_branch=$(git -C "$selected_repo" branch --show-current)
     if [ -z "$current_branch" ]; then
         echo -e "${RED}Detached HEAD state. Cannot merge.${NC}"
         sleep 2
@@ -1055,7 +1032,7 @@ merge_branch() {
     fi
     
     local branches
-    branches=$(git -C "$repo_path" branch --format='%(refname:short)' | grep -v "^${current_branch}$")
+    branches=$(git -C "$selected_repo" branch --format='%(refname:short)' | grep -v "^${current_branch}$")
     
     if [ -z "$branches" ]; then
         echo -e "${YELLOW}No other branches to merge.${NC}"
@@ -1071,7 +1048,7 @@ merge_branch() {
     fi
     
     local revs
-    revs=$(git -C "$repo_path" rev-list --left-right --count "${current_branch}...${branch_to_merge}" 2>/dev/null || echo "0 0")
+    revs=$(git -C "$selected_repo" rev-list --left-right --count "${current_branch}...${branch_to_merge}" 2>/dev/null || echo "0 0")
     local commits_behind
     commits_behind=$(echo "$revs" | awk '{print $1}')
     local commits_ahead
@@ -1085,7 +1062,7 @@ merge_branch() {
     echo -e "${BLUE}║${NC}              ${BOLD}MERGE PREVIEW${NC}                 ${BLUE}║${NC}"
     echo -e "${BLUE}╚════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "  ${DIM}Repository: ${BOLD}${repo_name}${NC}"
+    echo -e "  ${DIM}Repository: ${BOLD}$(basename "$selected_repo")${NC}"
     echo ""
     echo -e "  ${GREEN}Merge:${NC}     ${branch_to_merge}"
     echo -e "  ${YELLOW}Into:${NC}      ${current_branch}"
@@ -1114,7 +1091,7 @@ merge_branch() {
     echo ""
     echo -e "${DIM}  Recent commits in ${branch_to_merge}:${NC}"
     echo -e "${DIM}  ─────────────────────────────────────${NC}"
-    git -C "$repo_path" log "${branch_to_merge}" --oneline -5 | sed 's/^/    /'
+    git -C "$selected_repo" log "${branch_to_merge}" --oneline -5 | sed 's/^/    /'
     echo ""
     echo -e "${BLUE}╔════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║${NC}  Are you sure you want to merge?               ${BLUE}║${NC}"
@@ -1134,11 +1111,11 @@ merge_branch() {
     echo -e "${BLUE}Merging ${branch_to_merge} into ${current_branch}...${NC}"
     echo ""
     
-    if git -C "$repo_path" merge "${branch_to_merge}" --no-edit 2>&1; then
+    if git -C "$selected_repo" merge "${branch_to_merge}" --no-edit 2>&1; then
         echo ""
         echo -e "${GREEN}✅ Merge successful!${NC}"
         echo ""
-        git -C "$repo_path" log --oneline -3
+        git -C "$selected_repo" log --oneline -3
         sleep 2
     else
         echo ""
