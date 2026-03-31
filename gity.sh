@@ -1005,6 +1005,119 @@ open_existing() {
     fi
 }
 
+merge_branch() {
+    if [ ! -d ".git" ]; then
+        echo -e "${RED}Not a git repository!${NC}"
+        sleep 2
+        return
+    fi
+    
+    local current_branch
+    current_branch=$(git branch --show-current)
+    if [ -z "$current_branch" ]; then
+        echo -e "${RED}Currently in detached HEAD state. Cannot merge.${NC}"
+        sleep 2
+        return
+    fi
+    
+    local branches
+    branches=$(git branch --format='%(refname:short)' | grep -v "^${current_branch}$")
+    
+    if [ -z "$branches" ]; then
+        echo -e "${YELLOW}No other branches to merge.${NC}"
+        sleep 2
+        return
+    fi
+    
+    local selected
+    selected=$(echo "$branches" | fzf --height 60% --border --header="Current: ${YELLOW}${current_branch}${NC}  →  Select branch to merge into" --prompt="Merge > " || true)
+    
+    if [ -z "$selected" ]; then
+        return
+    fi
+    
+    local revs
+    revs=$(git rev-list --left-right --count "${current_branch}...${selected}" 2>/dev/null || echo "0 0")
+    local commits_behind
+    commits_behind=$(echo "$revs" | awk '{print $1}')
+    local commits_ahead
+    commits_ahead=$(echo "$revs" | awk '{print $2}')
+    local diverged=0
+    [ "$commits_ahead" -gt 0 ] && [ "$commits_behind" -gt 0 ] && diverged=1
+    
+    clear
+    echo ""
+    echo -e "${BLUE}╔════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║${NC}            ${BOLD}MERGE PREVIEW${NC}                  ${BLUE}║${NC}"
+    echo -e "${BLUE}╚════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "  ${GREEN}Merge:${NC}    ${selected}"
+    echo -e "  ${YELLOW}Into:${NC}      ${current_branch}"
+    echo ""
+    
+    if [ "$diverged" -eq 1 ]; then
+        echo -e "  ${RED}⚠️  WARNING: Branches have diverged!${NC}"
+        echo -e "  ${RED}    This will create a merge commit.${NC}"
+        echo ""
+    fi
+    
+    if [ "$commits_behind" -gt 0 ]; then
+        echo -e "  ${CYAN}📥 ${selected} is ${commits_behind} commit(s) ahead${NC}"
+    fi
+    
+    if [ "$commits_ahead" -gt 0 ]; then
+        echo -e "  ${MAGENTA}📤 ${current_branch} is ${commits_ahead} commit(s) ahead${NC}"
+    fi
+    
+    if [ "$commits_ahead" -eq 0 ] && [ "$commits_behind" -eq 0 ]; then
+        echo -e "  ${YELLOW}Already up to date${NC}"
+        sleep 2
+        return
+    fi
+    
+    echo ""
+    echo -e "${DIM}  Recent commits in ${selected}:${NC}"
+    echo -e "${DIM}  ─────────────────────────────────────${NC}"
+    git log "${selected}" --oneline -5 | sed 's/^/    /'
+    echo ""
+    echo -e "${BLUE}╔════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║${NC}  Are you sure you want to merge?               ${BLUE}║${NC}"
+    echo -e "${BLUE}╚════════════════════════════════════════════════╝${NC}"
+    echo ""
+    
+    local confirm
+    confirm=$(echo -e "✅ Yes, Merge\n❌ No, Cancel" | fzf --height 15% --border --prompt="Confirm > " || true)
+    
+    if [ "$confirm" != "✅ Yes, Merge" ]; then
+        echo -e "${YELLOW}Merge cancelled.${NC}"
+        sleep 1
+        return
+    fi
+    
+    echo ""
+    echo -e "${BLUE}Merging ${selected} into ${current_branch}...${NC}"
+    echo ""
+    
+    if git merge "${selected}" --no-edit 2>&1; then
+        echo ""
+        echo -e "${GREEN}✅ Merge successful!${NC}"
+        echo ""
+        git log --oneline -3
+        sleep 2
+    else
+        echo ""
+        echo -e "${RED}❌ Merge failed - conflicts detected!${NC}"
+        echo ""
+        echo -e "${YELLOW}  To resolve conflicts:${NC}"
+        echo -e "${YELLOW}  1. Edit the conflicting files${NC}"
+        echo -e "${YELLOW}  2. git add <resolved-files>${NC}"
+        echo -e "${YELLOW}  3. git commit${NC}"
+        echo ""
+        echo -e "${DIM}  Press ${BOLD}[Enter]${NC}${DIM} to continue...${NC}"
+        read -n 1 -s
+    fi
+}
+
 while true; do
     clear
     echo -e "${BLUE}╔═══════════════════════════════════════════════════╗${NC}"
@@ -1020,10 +1133,11 @@ while true; do
 ⚡ Bulk Actions
 🔍 Search Across Repos
 🐙 GitHub Repos
+🔀 Merge Branch
 🔗 Clone Repository
 ✨ Create New Repository
 🔄 Refresh Cache
-❌ Exit" | fzf --height 45% --layout=reverse --border --prompt="Main Menu > " || true)
+❌ Exit" | fzf --height 50% --layout=reverse --border --prompt="Main Menu > " || true)
     
     case "$choice" in
         "📊 Dashboard (Repos Needing Work)")
@@ -1043,6 +1157,9 @@ while true; do
             ;;
         "🐙 GitHub Repos")
             github_repos
+            ;;
+        "🔀 Merge Branch")
+            merge_branch
             ;;
         "🔗 Clone Repository")
             clone_repo
