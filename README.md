@@ -10,9 +10,6 @@ No more hunting for repos across your filesystem. Gity automatically discovers a
 
 ### Visualization Dashboard
 - **📊 Repos Needing Attention** — See at a glance which repos need work, color-coded by severity
-- **📅 Activity Timeline** — View recent commits across all repos in a beautiful timeline
-- **🕰️ Stale Repo Finder** — Find abandoned repos you forgot about
-- **🌿 Branch Health** — Check branch status across all repos
 
 ### Core Features
 - **Auto-Discovery** — Scans your home directory and finds all Git repos automatically
@@ -21,6 +18,7 @@ No more hunting for repos across your filesystem. Gity automatically discovers a
 - **Search Across Repos** — Search for any text or file across all your repos in one query
 - **Bulk Actions** — Pull, push, commit, or run custom commands on multiple repos at once
 - **GitHub Integration** — Browse and clone repos from your GitHub account directly
+- **🔀 Merge Branches** — Merge branches in any repo with preview and confirmation
 - **Recent First** — Your most-used repos always appear at the top
 - **Clone & Create** — Clone new repos or create new ones from the app
 - **Quick Actions** — Open in Lazygit, your default editor, or your file manager
@@ -104,11 +102,10 @@ gity
 | **📊 Dashboard** | Visual dashboard showing repos needing attention |
 | **📂 Browse All Repositories** | Search and open an existing repo (with status indicators) |
 | **📅 Activity Timeline** | View recent commits across all repos |
-| **🕰️ Stale Repos** | Find abandoned/inactive repos |
-| **🌿 Branch Health** | Check branch status across all repos |
 | **⚡ Bulk Actions** | Perform actions on multiple repos at once |
 | **🔍 Search Across Repos** | Search for text or files across all repos |
 | **🐙 GitHub Repos** | Browse and clone from your GitHub account |
+| **🔀 Merge Branch** | Merge branches in any repo with preview and confirmation |
 | **🔗 Clone Repository** | Clone a new repo from URL |
 | **✨ Create New Repository** | Initialize a new repo with an initial commit |
 | **🔄 Refresh Cache** | Rescan for repositories |
@@ -127,9 +124,9 @@ gity
 ### Dashboard View
 
 The dashboard shows repos categorized by urgency:
-- **🔴 CRITICAL** — Repos with uncommitted changes or diverged from remote
-- **🟡 WARNINGS** — Repos that are ahead or behind
-- **🟢 HEALTHY** — Repos that are fully synced
+- **🔴 NEED ATTENTION** — Repos with uncommitted changes or diverged from remote
+- **🟡 NEED SYNC** — Repos that are ahead or behind
+- **🟢 ALL SYNCED** — Repos that are fully synced
 
 ### Activity Timeline
 
@@ -138,19 +135,14 @@ View recent commits across all your repos:
 - Groups commits by day
 - Filter by timeframe: 1 day, 7 days, or 30 days
 
-### Stale Repo Finder
+### Merge Branch
 
-Find repos that haven't been touched in a while:
-- **🟡 Yellow** — 30-60 days inactive
-- **🔴 Red** — 60-90 days inactive
-- **⚠️ Dark Red** — 90+ days abandoned
-
-### Branch Health
-
-See the state of branches across all repos:
-- Number of branches per repo
-- Current branch highlighted
-- Stale branches flagged
+Merge branches in any repository with a step-by-step wizard:
+1. Select the repository
+2. Choose the target branch (the branch to merge INTO)
+3. Choose the source branch (the branch to merge)
+4. Preview the merge with commit counts
+5. Confirm or cancel
 
 ### Repository Actions
 

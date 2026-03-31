@@ -18,11 +18,10 @@ Gity's main menu provides quick access to all features:
 📊 Dashboard (Repos Needing Work)
 📂 Browse All Repositories
 📅 Activity Timeline
-🕰️ Stale Repos
-🌿 Branch Health
 ⚡ Bulk Actions
 🔍 Search Across Repos
 🐙 GitHub Repos
+🔀 Merge Branch
 🔗 Clone Repository
 ✨ Create New Repository
 🔄 Refresh Cache
@@ -38,25 +37,22 @@ Gity's main menu provides quick access to all features:
 The dashboard provides an at-a-glance view of all your repos, categorized by urgency:
 
 ```
-╔════════════════════════════════════════════════════════════╗
-║                 📊 REPOS NEEDING ATTENTION               ║
-╠════════════════════════════════════════════════════════════╣
-║  Total: 12 repos scanned
-╠════════════════════════════════════════════════════════════╣
-║  🔴 CRITICAL (2 repos)
-║  
-║    ✎ ultra-fast-carousel    3 file(s) changed
-║    ↕ dynamicleo            3↑, 2↓
-╠════════════════════════════════════════════════════════════╣
-║  🟡 WARNINGS (1 repos)
-║  
-║    ↑ wordpress-manager      2 commit(s) ahead
-╠════════════════════════════════════════════════════════════╣
-║  🟢 HEALTHY (9 repos)
-║  
-║    ● gity                  All synced
-║    ● terraform-config       All synced
-╚════════════════════════════════════════════════════════════╝
+📊 DASHBOARD
+
+  Total repos scanned: 12
+
+🔴 NEED ATTENTION (2 repos)
+    ● gity
+    ● wordpress-manager
+
+🟡 NEED SYNC (1 repos)
+    ✎ plugins  3 file(s) changed
+
+🟢 ALL SYNCED (9 repos)
+
+Legend: ●Clean ✎Changes ↑Ahead ↓Behind ↕Diverged
+
+Press [Enter] to return to menu...
 ```
 
 **Legend:**
@@ -70,76 +66,20 @@ The dashboard provides an at-a-glance view of all your repos, categorized by urg
 
 ### 📅 Activity Timeline
 
-View your recent work across all repos:
+View your recent work across all repos. Choose timeframe with fzf: 1 Day, 7 Days, or 30 Days.
 
 ```
-╔════════════════════════════════════════════════════════════╗
-║              📅 ACTIVITY TIMELINE                       ║
-║              (Last 7 days)                             ║
-╠════════════════════════════════════════════════════════════╣
-║  Today
-║    gity           fix: menu mismatch
-║    gity           add: bulk actions feature
-║    dynamicleo     Enhancement: Hero animations
-╠════════════════════════════════════════════════════════════╣
-║  Yesterday
-║    wordpress      add: plugin installer
-║    plugins-repo   chore: update deps
-╠════════════════════════════════════════════════════════════╣
-║  Mar 25
-║    terraform      fix: bucket permissions
-╚════════════════════════════════════════════════════════════╝
-```
+📅 ACTIVITY TIMELINE (Last 7 days)
+  Total: 15 commits across all repos
 
-**Keyboard shortcuts:**
-- `1` — Last day
-- `7` — Last week (default)
-- `30` — Last month
+2024-03-25
+    gity          fix: menu mismatch
+    gity          add: bulk actions feature
+    dynamicleo    Enhancement: Hero animations
 
----
-
-### 🕰️ Stale Repos
-
-Find abandoned projects you forgot about:
-
-```
-╔════════════════════════════════════════════════════════════╗
-║                  🕰️ STALE REPOS                        ║
-╠════════════════════════════════════════════════════════════╣
-║  ⚠️ Stale/Abandoned repos (5)
-║  
-║    ⚠️  180 days   old-experiment    "initial commit"
-║    🔴   90 days   demo-app-2024     "add feature x"
-║    🔴   60 days   scratch-notes     "update readme"
-║    🟡   45 days   antigravity       "fix build"
-║    🟡   35 days   random-scripts    "cleanup"
-╠════════════════════════════════════════════════════════════╣
-║  Active/Recent: 7 repos
-╚════════════════════════════════════════════════════════════╝
-```
-
-**Thresholds:**
-- `🟡 Yellow` — 30-60 days inactive
-- `🔴 Red` — 60-90 days inactive
-- `⚠️ Dark Red` — 90+ days abandoned
-
----
-
-### 🌿 Branch Health
-
-Check the state of branches across all repos:
-
-```
-╔════════════════════════════════════════════════════════════╗
-║                  🌿 BRANCH HEALTH                      ║
-╠════════════════════════════════════════════════════════════╣
-║  🟢 gity              3 branches  •  master
-║  🟡 dynamicleo        8 branches  •  ehtisham/design
-║      • 3 stale branches
-║  🟢 ultra-fast-carousel  1 branch  •  master
-║  🔴 terraform-config   12 branches •  main
-║      • 7 stale branches
-╚════════════════════════════════════════════════════════════╝
+2024-03-24
+    wordpress     add: plugin installer
+    plugins-repo  chore: update deps
 ```
 
 ---
@@ -179,6 +119,23 @@ Browse and clone repositories from your GitHub account:
 2. Authenticate with `gh auth login`
 3. Browse your top 100 repos
 4. Clone directly or open in browser
+
+### 🔀 Merge Branch
+
+Merge branches in any repository with a step-by-step wizard:
+
+1. **Select repository** — Choose the repo to work with
+2. **Select target branch** — Choose the branch to merge INTO
+3. **Select source branch** — Choose the branch to merge
+4. **Preview** — See merge stats (commits ahead/behind, divergence warning)
+5. **Confirm** — Yes, Merge or Cancel
+
+The merge preview shows:
+- Repository name
+- Source and target branches
+- Commit counts
+- Divergence warning if branches have diverged
+- Recent commits from the source branch
 
 ### Clone Repository
 
@@ -223,9 +180,6 @@ Copies the repo path (requires `xclip`/`xsel`/`wl-copy`).
 | `Enter` | Select |
 | `Escape` | Go back |
 | `Tab` | Multi-select (Bulk Actions) |
-| `Q` | Quit (in visualization views) |
-| `R` | Refresh (Dashboard) |
-| `1/7/30` | Timeline timeframe |
 | Type | Fuzzy search filter |
 
 ---
