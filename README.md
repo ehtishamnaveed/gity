@@ -2,14 +2,21 @@
 
 **A powerful, keyboard-driven TUI hub for managing all your Git repositories in one place.**
 
-No more hunting for repos across your filesystem. Gity automatically discovers all your Git repositories and brings them together with status indicators, cross-repo search, bulk actions, and GitHub integration.
+No more hunting for repos across your filesystem. Gity automatically discovers all your Git repositories and brings them together with beautiful visualizations, status indicators, cross-repo search, bulk actions, and GitHub integration.
 
 ![Gity Screenshot](docs/screenshot.png)
 
 ## Features
 
+### Visualization Dashboard
+- **📊 Repos Needing Attention** — See at a glance which repos need work, color-coded by severity
+- **📅 Activity Timeline** — View recent commits across all repos in a beautiful timeline
+- **🕰️ Stale Repo Finder** — Find abandoned repos you forgot about
+- **🌿 Branch Health** — Check branch status across all repos
+
+### Core Features
 - **Auto-Discovery** — Scans your home directory and finds all Git repos automatically
-- **Repo Status Overview** — See at a glance which repos have changes, need pushing, or need pulling
+- **Repo Status Overview** — See which repos have changes, need pushing, or need pulling
 - **Fuzzy Search** — Instantly filter through hundreds of repos with fzf
 - **Search Across Repos** — Search for any text or file across all your repos in one query
 - **Bulk Actions** — Pull, push, commit, or run custom commands on multiple repos at once
@@ -28,6 +35,7 @@ No more hunting for repos across your filesystem. Gity automatically discovers a
 - A way to open directories — uses `$EDITOR`, `xdg-open`, or platform defaults
 - A clipboard tool (`xclip`, `xsel`, `wl-copy`, or Windows `clip`) — optional
 - `gh` CLI — optional, for GitHub integration
+- `python3` — optional, for stale repo detection
 
 ## Installation
 
@@ -93,14 +101,18 @@ gity
 
 | Option | Description |
 |---|---|
-| **Browse All Repositories** | Search and open an existing repo (with status indicators) |
-| **Search Across Repos** | Search for text or files across all repos |
-| **Bulk Actions** | Perform actions on multiple repos at once |
-| **GitHub Repos** | Browse and clone from your GitHub account |
-| **Clone Repository** | Clone a new repo from URL |
-| **Create New Repository** | Initialize a new repo with an initial commit |
-| **Refresh Cache** | Rescan for repositories |
-| **Exit** | Quit Gity |
+| **📊 Dashboard** | Visual dashboard showing repos needing attention |
+| **📂 Browse All Repositories** | Search and open an existing repo (with status indicators) |
+| **📅 Activity Timeline** | View recent commits across all repos |
+| **🕰️ Stale Repos** | Find abandoned/inactive repos |
+| **🌿 Branch Health** | Check branch status across all repos |
+| **⚡ Bulk Actions** | Perform actions on multiple repos at once |
+| **🔍 Search Across Repos** | Search for text or files across all repos |
+| **🐙 GitHub Repos** | Browse and clone from your GitHub account |
+| **🔗 Clone Repository** | Clone a new repo from URL |
+| **✨ Create New Repository** | Initialize a new repo with an initial commit |
+| **🔄 Refresh Cache** | Rescan for repositories |
+| **❌ Exit** | Quit Gity |
 
 ### Status Indicators
 
@@ -111,6 +123,34 @@ gity
 | `↑` (cyan) | Ahead of remote — commits to push |
 | `↓` (red) | Behind remote — commits to pull |
 | `↕` (magenta) | Diverged — both ahead and behind |
+
+### Dashboard View
+
+The dashboard shows repos categorized by urgency:
+- **🔴 CRITICAL** — Repos with uncommitted changes or diverged from remote
+- **🟡 WARNINGS** — Repos that are ahead or behind
+- **🟢 HEALTHY** — Repos that are fully synced
+
+### Activity Timeline
+
+View recent commits across all your repos:
+- Shows last 7 days of activity by default
+- Groups commits by day
+- Filter by timeframe: 1 day, 7 days, or 30 days
+
+### Stale Repo Finder
+
+Find repos that haven't been touched in a while:
+- **🟡 Yellow** — 30-60 days inactive
+- **🔴 Red** — 60-90 days inactive
+- **⚠️ Dark Red** — 90+ days abandoned
+
+### Branch Health
+
+See the state of branches across all repos:
+- Number of branches per repo
+- Current branch highlighted
+- Stale branches flagged
 
 ### Repository Actions
 
@@ -131,15 +171,16 @@ After selecting a repo, you can:
 - Press **Escape** or select empty to go back
 - Type to **fuzzy search** filter the list
 - **Tab** to multi-select in Bulk Actions
+- Press **Q** to quit in visualization views
 
 ### Bulk Actions
 
 When you select **Bulk Actions**, you can:
-- **Pull All** — Run `git pull` on all selected repos
-- **Push All** — Run `git push` on all selected repos
+- **Pull All** — Run `git pull` on each selected repo
+- **Push All** — Run `git push` on each selected repo
 - **Status All** — View git status of all selected repos
-- **Commit All** — Add and commit all changes with a single message
-- **Custom Command** — Run any command on each selected repo
+- **Commit All** — Add all changes and commit with a single message
+- **Custom Command** — Run any shell command on each repo (use `{repo}` for the path)
 
 ### GitHub Integration
 
@@ -159,9 +200,10 @@ Enter any text or file pattern to search across all your repositories at once. R
 
 1. **First Run** — Gity scans your home directory for `.git` folders and builds a cache
 2. **Status Checking** — Shows real-time git status indicators for each repo
-3. **Caching** — Repo list is stored in `~/.cache/lazygit_repos` for fast access
-4. **Recent Repos** — Your last 10 opened repos are tracked in `~/.cache/lazygit_recent`
-5. **Smart Scanning** — Deep scan `~/Work`, `~/Plugins`, `~/Documents`, `~/Desktop`, `~/Luminor`, plus broad home scan (excluding cache directories)
+3. **Visualizations** — Beautiful dashboards for attention, activity, staleness, and branch health
+4. **Caching** — Repo list is stored in `~/.cache/lazygit_repos` for fast access
+5. **Recent Repos** — Your last 10 opened repos are tracked in `~/.cache/lazygit_recent`
+6. **Smart Scanning** — Deep scan `~/Work`, `~/Plugins`, `~/Documents`, `~/Desktop`, `~/Luminor`, plus broad home scan (excluding cache directories)
 
 ## Configuration
 
