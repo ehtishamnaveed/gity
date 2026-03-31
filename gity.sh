@@ -1045,34 +1045,12 @@ open_existing() {
     if [ ! -s "$CACHE_FILE" ]; then
         refresh_cache
     fi
-    
-    local all_repos
-    all_repos=$( (cat "$RECENT_FILE"; cat "$CACHE_FILE") | awk 'NF && !x[$0]++')
-    
-    local formatted
-    formatted=$(format_repos_with_status <(echo "$all_repos"))
-    
-    if [ -z "$formatted" ]; then
-        echo -e "${YELLOW}No repositories found. Run 'Refresh' to rescan.${NC}"
-        sleep 2
-        return
-    fi
-    
+
     local selected
-    selected=$(echo "$formatted" | fzf --height 70% --border --header="Status: ●Clean ✎Changes ↑Ahead ↓Behind ↕Diverged" --prompt="Search > " || true)
-    
-    if [ -z "$selected" ]; then
-        return
-    fi
-    
-    local name
-    name=$(echo "$selected" | sed 's/^[^*↓↑↕✎●]*\s\+//' | awk '{print $1}')
-    
-    local repo_path
-    repo_path=$(grep -F "/${name}" "$CACHE_FILE" | awk -F/ '{if ($NF == "'"${name}"'") print}' | head -1)
-    
-    if [ -n "$repo_path" ] && [ -d "$repo_path" ]; then
-        repo_actions "$repo_path"
+    selected=$( (cat "$RECENT_FILE"; cat "$CACHE_FILE") | awk 'NF && !x[$0]++' | fzf --height 60% --border --header="Select Repository (Recent at top)" --prompt="Search > " || true)
+
+    if [ -n "$selected" ]; then
+        repo_actions "$selected"
     fi
 }
 
@@ -1088,8 +1066,6 @@ while true; do
     choice=$(echo -e "📊 Dashboard (Repos Needing Work)
 📂 Browse All Repositories
 📅 Activity Timeline
-🕰️ Stale Repos
-🌿 Branch Health
 ⚡ Bulk Actions
 🔍 Search Across Repos
 🐙 GitHub Repos
@@ -1107,12 +1083,6 @@ while true; do
             ;;
         "📅 Activity Timeline")
             show_activity_timeline 7
-            ;;
-        "🕰️ Stale Repos")
-            show_stale_repos
-            ;;
-        "🌿 Branch Health")
-            show_branch_health
             ;;
         "⚡ Bulk Actions")
             bulk_actions
