@@ -6,10 +6,6 @@
 gity
 ```
 
-You'll see the main menu immediately. From there, browse, clone, or create repos.
-
----
-
 ## First Time Setup
 
 Gity will automatically scan your system on first run. This may take a few seconds depending on how many directories you have. The results are cached for faster subsequent launches.
@@ -24,14 +20,28 @@ Gity searches these directories by default:
 - `~/Luminor`
 - General `~` (excluding cache directories)
 
-To customize which directories are scanned, edit `gity.sh` and modify the `find` commands in the `refresh_cache()` function.
-
 ---
 
 ## Main Menu Options
 
 ### Browse All Repositories
-Opens a searchable list of all discovered Git repos. Recent repos appear at the top. Use fuzzy search to filter by name or path.
+Opens a searchable list of all discovered Git repos with **status indicators**. Recent repos appear at the top. Use fuzzy search to filter by name or path.
+
+### Search Across Repos
+Search for any text or file across all your repositories at once. Enter your search query and Gity will grep through every repo. Results show the file path and matching line number. Select a result to open that repo directly.
+
+### Bulk Actions
+Select multiple repos and perform actions on all of them at once:
+- **Pull All** — Run `git pull` on each selected repo
+- **Push All** — Run `git push` on each selected repo
+- **Status All** — View git status of all selected repos
+- **Commit All** — Add all changes and commit with a single message
+- **Custom Command** — Run any shell command on each repo (use `{repo}` for the path)
+
+Use **Tab** to select multiple repos.
+
+### GitHub Repos
+Browse and clone repositories from your GitHub account directly. Requires the `gh` CLI to be installed and authenticated.
 
 ### Clone Repository
 Prompts for a Git URL (HTTPS or SSH). Clones into `~/Documents/Github/<repo-name>`. After cloning, you'll be taken to the repo actions menu.
@@ -39,8 +49,23 @@ Prompts for a Git URL (HTTPS or SSH). Clones into `~/Documents/Github/<repo-name
 ### Create New Repository
 Prompts for a name. Creates the directory, initializes a Git repo, adds a blank `README.md`, and makes an initial commit. Then takes you to the repo actions menu.
 
+### Refresh Cache
+Rescans your home directory for new Git repositories and updates the cache.
+
 ### Exit
 Quits Gity.
+
+---
+
+## Status Indicators
+
+| Indicator | Meaning |
+|---|---|
+| `●` (green) | Clean — no uncommitted changes |
+| `✎` (yellow) | Has uncommitted changes |
+| `↑` (cyan) | Ahead of remote — commits to push |
+| `↓` (red) | Behind remote — commits to pull |
+| `↕` (magenta) | Diverged — both ahead and behind |
 
 ---
 
@@ -73,6 +98,7 @@ Copies the full path of the repository. Requires a clipboard tool (`xclip`, `xse
 Gity caches the list of repos in `~/.cache/lazygit_repos`. The cache is automatically refreshed when:
 - The cache file is empty or missing
 - A new repo is cloned or created through Gity
+- You select "Refresh Cache" from the menu
 
 To force a rescan, simply delete the cache file:
 
@@ -81,6 +107,32 @@ rm ~/.cache/lazygit_repos
 ```
 
 The next time you run Gity, it will rescan.
+
+---
+
+## GitHub Integration
+
+To use GitHub features, install the GitHub CLI:
+
+```bash
+# Arch
+sudo pacman -S github-cli
+
+# Ubuntu/Debian
+sudo apt install gh
+
+# macOS
+brew install gh
+
+# Windows (in WSL)
+sudo apt install gh
+```
+
+Then authenticate:
+
+```bash
+gh auth login
+```
 
 ---
 
@@ -109,6 +161,19 @@ head -n 10   # change 10 to desired number
 
 ---
 
+## Keyboard Shortcuts
+
+| Key | Action |
+|---|---|
+| `↑` / `↓` or `j` / `k` | Navigate options |
+| `Enter` | Select |
+| `Escape` | Go back / Cancel |
+| `Tab` | Multi-select (in Bulk Actions) |
+| `Ctrl+C` | Exit |
+| Type | Fuzzy search filter |
+
+---
+
 ## Troubleshooting
 
 ### "lazygit not found"
@@ -134,6 +199,12 @@ If the "Copy Path" option is missing or not working, install one of:
 - `xsel` (X11 alternative)
 - `wl-copy` (Wayland)
 
+### GitHub Repos not working
+Make sure `gh` CLI is installed and you're authenticated:
+```bash
+gh auth status
+```
+
 ### Gity not found after install
 Make sure `~/.local/bin` is in your PATH:
 
@@ -142,15 +213,3 @@ export PATH="$HOME/.local/bin:$PATH"
 ```
 
 Add this to `~/.bashrc` or `~/.zshrc` to make it permanent.
-
----
-
-## Keyboard Shortcuts
-
-| Key | Action |
-|---|---|
-| `↑` / `↓` or `j` / `k` | Navigate options |
-| `Enter` | Select |
-| `Escape` | Go back / Cancel |
-| `Ctrl+C` | Exit |
-| Type | Fuzzy search filter |
