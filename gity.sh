@@ -621,52 +621,9 @@ show_dashboard() {
     
     rm -f "$critical_file" "$warning_file" "$healthy_file"
     
-    local all_repos_file=$(mktemp)
-    local critical_count2=0 warning_count2=0 healthy_count2=0
-    
-    while IFS= read -r repo; do
-        [ ! -d "$repo/.git" ] && continue
-        local name
-        name=$(basename "$repo")
-        echo "$name|$repo" >> "$all_repos_file"
-    done <<< "$all_repos"
-    
-    local selected
-    selected=$(cat "$all_repos_file" | while IFS='|' read -r name repo; do
-        [ ! -d "$repo/.git" ] && continue
-        local status_info
-        status_info=$(get_repo_status "$repo")
-        local status=$(echo "$status_info" | cut -d'|' -f1)
-        local has_changes=$(echo "$status_info" | cut -d'|' -f2)
-        local ahead=$(echo "$status_info" | cut -d'|' -f3)
-        local behind=$(echo "$status_info" | cut -d'|' -f4)
-        local dirty_files=$(echo "$status_info" | cut -d'|' -f5)
-        local details=""
-        if [ "$has_changes" -eq 1 ]; then
-            details="${dirty_files} file(s) changed"
-        fi
-        [ "$ahead" -gt 0 ] && [ -n "$details" ] && details="$details, " && details="${details}${ahead}↑"
-        [ "$behind" -gt 0 ] && [ -n "$details" ] && details="$details, " && details="${details}${behind}↓"
-        [ "$ahead" -gt 0 ] && [ "$behind" -eq 0 ] && [ -z "$details" ] && details="${ahead} commit(s) ahead"
-        [ "$behind" -gt 0 ] && [ "$ahead" -eq 0 ] && [ -z "$details" ] && details="${behind} commit(s) behind"
-        [ -z "$details" ] && details="All synced"
-        echo "$status ${BOLD}${name}${NC}  ${DIM}$details${NC}"
-    done | fzf --height 80% --border --header="Dashboard - Select a repo" --prompt="> " || true)
-    
-    rm -f "$all_repos_file"
-    
-    if [ -z "$selected" ]; then
-        return
-    fi
-    
-    local name
-    name=$(echo "$selected" | sed 's/^[^*↓↑↕✎●]*\s\+//' | awk '{print $1}')
-    local repo_path
-    repo_path=$(grep -F "/${name}" "$CACHE_FILE" | awk -F/ '{if ($NF == "'"${name}"'") print}' | head -1)
-    
-    if [ -n "$repo_path" ] && [ -d "$repo_path" ]; then
-        repo_actions "$repo_path"
-    fi
+    echo ""
+    echo -e "${DIM}  Press ${BOLD}[Enter]${NC}${DIM} to return to menu...${NC}"
+    read -n 1 -s
 }
 
 # ============================================================
