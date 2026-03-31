@@ -68,7 +68,7 @@ check_deps() {
         echo -e "${BLUE}  • macOS:      brew install$missing${NC}"
         echo ""
         echo -e "${YELLOW}  Or use the installer:${NC}"
-        echo -e "${GREEN}  bash <(curl -sL https://github.com/YOUR_USER/gity/install.sh)${NC}"
+        echo -e "${GREEN}  bash <(curl -sL https://github.com/ehtishamnaveed/gity/install.sh)${NC}"
         echo ""
         exit 1
     fi
