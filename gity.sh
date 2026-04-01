@@ -103,7 +103,7 @@ check_deps() {
         echo -e "${BLUE}  • macOS:      brew install$missing${NC}"
         echo ""
         echo -e "${YELLOW}  Or use the installer:${NC}"
-        echo -e "${GREEN}  bash <(curl -sL https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.sh)${NC}"
+        echo -e "${GREEN}  curl -sSL https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.sh | bash${NC}"
         echo ""
         exit 1
     fi

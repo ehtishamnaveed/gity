@@ -40,16 +40,16 @@ No more hunting for repos across your filesystem. Gity automatically discovers a
 ### One-Line Install (All Platforms)
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.sh)
+curl -sSL https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.sh | bash
 ```
 
 That's it. One command. Works on Linux, macOS, and Windows (WSL / Git Bash).
 
 The installer will:
-- Auto-detect your system
-- Install `git`, `fzf`, and `lazygit` automatically
-- Install Gity to `~/.local/bin/gity`
-- Set up your PATH
+- Download Gity to `~/.local/bin/gity`
+- Make it executable
+
+After installation, make sure `~/.local/bin` is in your PATH.
 
 ### Prerequisites for Windows
 
