@@ -1,6 +1,6 @@
 # Gity Windows Installer
 # One-command setup for Windows users
-# Downloads everything via curl - no winget needed
+# Uses PowerShell native commands - no curl, no winget
 # Usage: irm https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.ps1 | iex
 
 $InstallDir = Join-Path $env:LOCALAPPDATA "Programs\Gity"
@@ -33,88 +33,14 @@ function Check-Command {
     $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
-# ============================================================
-# CURL SETUP
-# ============================================================
-
-function Get-CurlPath {
-    # Check System32 first (Windows 10/11 has curl.exe here)
-    $systemCurl = Join-Path $env:SystemRoot "System32\curl.exe"
-    if (Test-Path $systemCurl) { return $systemCurl }
-    
-    # Check PATH
-    $pathCurl = Get-Command "curl.exe" -ErrorAction SilentlyContinue
-    if ($pathCurl) { return $pathCurl.Source }
-    
-    # Check our bin dir
-    $binCurl = Join-Path $BinDir "curl.exe"
-    if (Test-Path $binCurl) { return $binCurl }
-    
-    return $null
-}
-
-function Setup-Curl {
-    $curlPath = Get-CurlPath
-    if ($curlPath) {
-        Write-Success "curl.exe found at $curlPath"
-        return $true
-    }
-    
-    Write-Step "Downloading curl.exe..."
-    
-    if (!(Test-Path $BinDir)) {
-        New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
-    }
-    
-    # Download curl from official source
-    $curlUrl = "https://curl.se/windows/latest.cgi?p=win64-mingw"
-    $tempZip = Join-Path $env:TEMP "curl-win64.zip"
-    $tempDir = Join-Path $env:TEMP "curl-extract"
-    
-    try {
-        # Use PowerShell's built-in download (only for curl itself)
-        Invoke-WebRequest -Uri $curlUrl -UseBasicParsing -OutFile $tempZip
-        
-        if (!(Test-Path $tempDir)) {
-            New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
-        }
-        Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
-        
-        # Find curl.exe in extracted files
-        $curlExe = Get-ChildItem -Path $tempDir -Recurse -Filter "curl.exe" | Select-Object -First 1
-        if ($curlExe) {
-            Copy-Item $curlExe.FullName (Join-Path $BinDir "curl.exe") -Force
-            Add-ToPath $BinDir
-            Write-Success "curl.exe installed to $BinDir"
-            return $true
-        }
-    } catch {
-        Write-Err "Failed to download curl: $_"
-    } finally {
-        if (Test-Path $tempZip) { Remove-Item $tempZip -Force -ErrorAction SilentlyContinue }
-        if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue }
-    }
-    
-    return $false
-}
-
 function Download-File {
     param(
         [string]$Url,
         [string]$OutputPath
     )
     
-    $curlPath = Get-CurlPath
-    if ($curlPath) {
-        $result = & $curlPath -sSL --retry 3 --connect-timeout 10 -o $OutputPath $Url 2>&1
-        if ($LASTEXITCODE -eq 0 -and (Test-Path $OutputPath)) {
-            return $true
-        }
-        Write-Warn "curl failed (exit code: $LASTEXITCODE), falling back..."
-    }
-    
-    # Fallback to PowerShell
     try {
+        # Use PowerShell native download
         Invoke-WebRequest -Uri $Url -UseBasicParsing -OutFile $OutputPath
         return $true
     } catch {
@@ -122,29 +48,6 @@ function Download-File {
         return $false
     }
 }
-
-function Get-RemoteContent {
-    param([string]$Url)
-    
-    $curlPath = Get-CurlPath
-    if ($curlPath) {
-        $result = & $curlPath -sSL $Url 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            return $result
-        }
-    }
-    
-    # Fallback
-    try {
-        return (Invoke-WebRequest -Uri $Url -UseBasicParsing).Content
-    } catch {
-        return $null
-    }
-}
-
-# ============================================================
-# PATH MANAGEMENT
-# ============================================================
 
 function Add-ToPath {
     param([string]$PathToAdd)
@@ -168,10 +71,6 @@ function Add-ToPath {
     }
 }
 
-# ============================================================
-# TOOL INSTALLERS (via curl direct download)
-# ============================================================
-
 function Install-Git {
     if (Check-Command "git") {
         Write-Success "git already installed"
@@ -180,50 +79,39 @@ function Install-Git {
     
     Write-Step "Installing git..."
     
-    # Detect architecture
-    $arch = if ([Environment]::Is64BitOperatingSystem) { "64" } else { "32" }
-    Write-Step "Detected architecture: ${arch}-bit"
-    
-    # Download Git for Windows portable (no installer needed)
-    $gitUrl = "https://github.com/git-for-windows/git/releases/latest/download/PortableGit-${arch}-bit.7z.exe"
-    $gitPortable = Join-Path $InstallDir "git"
-    
-    if (!(Test-Path $gitPortable)) {
-        New-Item -ItemType Directory -Path $gitPortable -Force | Out-Null
+    $gitDir = Join-Path $InstallDir "git"
+    if (!(Test-Path $gitDir)) {
+        New-Item -ItemType Directory -Path $gitDir -Force | Out-Null
     }
     
+    # Download Git portable
+    $arch = if ([Environment]::Is64BitOperatingSystem) { "64" } else { "32" }
+    $gitUrl = "https://github.com/git-for-windows/git/releases/latest/download/PortableGit-${arch}-bit.7z.exe"
     $tempGit = Join-Path $env:TEMP "git-portable.exe"
     
     if (!(Download-File -Url $gitUrl -OutputPath $tempGit)) {
-        Write-Err "Failed to download Git portable"
-        Write-Warn "Please install Git manually from: https://git-scm.com/download/win"
+        Write-Warn "Could not download Git. Please install manually from: https://git-scm.com/download/win"
         return $false
     }
     
-    Write-Step "Extracting Git to $gitPortable..."
+    Write-Step "Extracting Git..."
     
     try {
-        # Git portable is a self-extracting 7z archive
-        # Use 7z or PowerShell to extract
-        Expand-Archive -Path $tempGit -DestinationPath $gitPortable -Force -ErrorAction Stop
-        
-        # Add git bin to PATH
-        $gitBin = Join-Path $gitPortable "bin"
+        Expand-Archive -Path $tempGit -DestinationPath $gitDir -Force
+        $gitBin = Join-Path $gitDir "bin"
         if (Test-Path $gitBin) {
             Add-ToPath $gitBin
             $env:PATH = "$env:PATH;$gitBin"
         }
-        
-        Write-Success "Git installed successfully (portable)"
+        Write-Success "Git installed successfully"
         return $true
     } catch {
-        Write-Warn "Could not extract Git portable: $_"
+        Write-Err "Failed to extract Git: $_"
         Write-Warn "Please install Git manually from: https://git-scm.com/download/win"
+        return $false
     } finally {
         if (Test-Path $tempGit) { Remove-Item $tempGit -Force -ErrorAction SilentlyContinue }
     }
-    
-    return $false
 }
 
 function Install-Fzf {
@@ -238,35 +126,35 @@ function Install-Fzf {
         New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
     }
     
-    # Download fzf binary
     $fzfUrl = "https://github.com/junegunn/fzf/releases/latest/download/fzf-0.70.0-windows_amd64.zip"
     $tempZip = Join-Path $env:TEMP "fzf.zip"
     
     if (!(Download-File -Url $fzfUrl -OutputPath $tempZip)) {
-        Write-Err "Failed to download fzf"
+        Write-Warn "Could not download fzf. Please install manually: winget install junegunn.fzf"
         return $false
     }
     
-    # Extract
     $tempDir = Join-Path $env:TEMP "fzf-extract"
     if (!(Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir -Force | Out-Null }
-    Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
     
-    # Copy fzf.exe to bin
-    $fzfExe = Get-ChildItem -Path $tempDir -Recurse -Filter "fzf.exe" | Select-Object -First 1
-    if ($fzfExe) {
-        Copy-Item $fzfExe.FullName (Join-Path $BinDir "fzf.exe") -Force
-        Add-ToPath $BinDir
-        Write-Success "fzf installed to $BinDir"
-    } else {
-        Write-Err "Could not find fzf.exe in archive"
+    try {
+        Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
+        
+        $fzfExe = Get-ChildItem -Path $tempDir -Recurse -Filter "fzf.exe" | Select-Object -First 1
+        if ($fzfExe) {
+            Copy-Item $fzfExe.FullName (Join-Path $BinDir "fzf.exe") -Force
+            Add-ToPath $BinDir
+            Write-Success "fzf installed"
+            return $true
+        }
+    } catch {
+        Write-Err "Failed to extract fzf: $_"
+    } finally {
+        if (Test-Path $tempZip) { Remove-Item $tempZip -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue }
     }
     
-    # Cleanup
-    if (Test-Path $tempZip) { Remove-Item $tempZip -Force }
-    if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
-    
-    return $true
+    return $false
 }
 
 function Install-Gh {
@@ -281,36 +169,38 @@ function Install-Gh {
         New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
     }
     
-    # Download gh binary
     $ghUrl = "https://github.com/cli/cli/releases/latest/download/gh_2.70.0_windows_amd64.zip"
     $tempZip = Join-Path $env:TEMP "gh.zip"
     
     if (!(Download-File -Url $ghUrl -OutputPath $tempZip)) {
-        Write-Err "Failed to download gh CLI"
+        Write-Warn "Could not download gh CLI. Please install manually: winget install GitHub.cli"
         return $false
     }
     
-    # Extract
     $tempDir = Join-Path $env:TEMP "gh-extract"
     if (!(Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir -Force | Out-Null }
-    Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
     
-    # Copy gh.exe to bin
-    $ghBinDir = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
-    if ($ghBinDir) {
-        $ghExe = Join-Path $ghBinDir.FullName "bin\gh.exe"
-        if (Test-Path $ghExe) {
-            Copy-Item $ghExe (Join-Path $BinDir "gh.exe") -Force
-            Add-ToPath $BinDir
-            Write-Success "gh CLI installed to $BinDir"
+    try {
+        Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
+        
+        $ghBinDir = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
+        if ($ghBinDir) {
+            $ghExe = Join-Path $ghBinDir.FullName "bin\gh.exe"
+            if (Test-Path $ghExe) {
+                Copy-Item $ghExe (Join-Path $BinDir "gh.exe") -Force
+                Add-ToPath $BinDir
+                Write-Success "gh CLI installed"
+                return $true
+            }
         }
+    } catch {
+        Write-Err "Failed to extract gh CLI: $_"
+    } finally {
+        if (Test-Path $tempZip) { Remove-Item $tempZip -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue }
     }
     
-    # Cleanup
-    if (Test-Path $tempZip) { Remove-Item $tempZip -Force }
-    if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
-    
-    return $true
+    return $false
 }
 
 function Install-Lazygit {
@@ -325,35 +215,35 @@ function Install-Lazygit {
         New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
     }
     
-    # Download lazygit binary
     $lazygitUrl = "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_0.59.0_Windows_x86_64.zip"
     $tempZip = Join-Path $env:TEMP "lazygit.zip"
     
     if (!(Download-File -Url $lazygitUrl -OutputPath $tempZip)) {
-        Write-Err "Failed to download lazygit"
+        Write-Warn "Could not download lazygit. Please install manually: winget install JesseDuffield.lazygit"
         return $false
     }
     
-    # Extract
     $tempDir = Join-Path $env:TEMP "lazygit-extract"
     if (!(Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir -Force | Out-Null }
-    Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
     
-    # Copy lazygit.exe to bin
-    $lazygitExe = Get-ChildItem -Path $tempDir -Recurse -Filter "lazygit.exe" | Select-Object -First 1
-    if ($lazygitExe) {
-        Copy-Item $lazygitExe.FullName (Join-Path $BinDir "lazygit.exe") -Force
-        Add-ToPath $BinDir
-        Write-Success "lazygit installed to $BinDir"
-    } else {
-        Write-Err "Could not find lazygit.exe in archive"
+    try {
+        Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
+        
+        $lazygitExe = Get-ChildItem -Path $tempDir -Recurse -Filter "lazygit.exe" | Select-Object -First 1
+        if ($lazygitExe) {
+            Copy-Item $lazygitExe.FullName (Join-Path $BinDir "lazygit.exe") -Force
+            Add-ToPath $BinDir
+            Write-Success "lazygit installed"
+            return $true
+        }
+    } catch {
+        Write-Err "Failed to extract lazygit: $_"
+    } finally {
+        if (Test-Path $tempZip) { Remove-Item $tempZip -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue }
     }
     
-    # Cleanup
-    if (Test-Path $tempZip) { Remove-Item $tempZip -Force }
-    if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
-    
-    return $true
+    return $false
 }
 
 function Download-Gity {
@@ -366,23 +256,22 @@ function Download-Gity {
     $gityFile = Join-Path $InstallDir "gity.ps1"
     
     if (Download-File -Url "$GityUrl/gity.ps1" -OutputPath $gityFile) {
-        Write-Success "Gity downloaded to $InstallDir"
+        Write-Success "Gity downloaded"
         return $true
     }
     return $false
 }
 
 function Save-Version {
-    $version = Get-RemoteContent -Url "$GityUrl/VERSION"
-    if ($version) {
-        $version = $version.Trim()
+    try {
+        $version = (Invoke-WebRequest -Uri "$GityUrl/VERSION" -UseBasicParsing -TimeoutSec 5).Content.Trim()
         if (!(Test-Path $CacheDir)) {
             New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
         }
         Set-Content -Path (Join-Path $CacheDir "VERSION") -Value $version -Force
         Write-Success "Version saved: $version"
-    } else {
-        Write-Warn "Could not fetch version info (will use default)"
+    } catch {
+        Write-Warn "Could not fetch version info"
     }
 }
 
@@ -393,18 +282,10 @@ function Save-Version {
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  GITY - Windows Installer v1.0.0" -ForegroundColor White
-Write-Host "  (curl-based, no winget needed)" -ForegroundColor Gray
+Write-Host "  (PowerShell native - no winget/curl)" -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Setup curl first
-Write-Step "Setting up curl..."
-if (!(Setup-Curl)) {
-    Write-Warn "curl setup failed, will use PowerShell fallback for downloads"
-}
-
-# Install dependencies via direct downloads
-Write-Host ""
 Write-Step "Installing dependencies..."
 Write-Host ""
 
@@ -415,26 +296,20 @@ Install-Lazygit
 
 Write-Host ""
 
-# Download Gity
 if (!(Download-Gity)) {
     exit 1
 }
 
-# Add to PATH
 Add-ToPath $InstallDir
 Add-ToPath $BinDir
-
-# Save version
 Save-Version
 
-# Success message
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "  INSTALLATION COMPLETE" -ForegroundColor White
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Installed to: $InstallDir" -ForegroundColor White
-Write-Host "Binaries in: $BinDir" -ForegroundColor White
 Write-Host ""
 Write-Host "To run Gity:" -ForegroundColor Cyan
 Write-Host "  1. Open a NEW terminal" -ForegroundColor Gray
