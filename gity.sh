@@ -62,6 +62,28 @@ RECENT_FILE="$HOME/.cache/lazygit_recent"
 mkdir -p "$REPO_DIR" "$(dirname "$CACHE_FILE")"
 touch "$RECENT_FILE"
 
+refresh_cache() {
+    echo -e "${BLUE}Scanning for Git repositories in $HOME...${NC}"
+    
+    find "$HOME/Work" "$HOME/Plugins" "$HOME/Documents" "$HOME/Desktop" "$HOME/Luminor" -maxdepth 4 -name ".git" -type d 2>/dev/null > "$CACHE_FILE.tmp"
+    
+    find "$HOME" -maxdepth 4 -name ".git" -type d \
+        -not -path "$HOME/.cache/*" \
+        -not -path "$HOME/.local/share/*" \
+        -not -path "$HOME/.npm/*" \
+        -not -path "$HOME/.cargo/*" \
+        -not -path "$HOME/.rustup/*" \
+        2>/dev/null >> "$CACHE_FILE.tmp"
+    
+    cat "$CACHE_FILE.tmp" | rev | cut -d'/' -f2- | rev | sort | uniq > "$CACHE_FILE"
+    rm -f "$CACHE_FILE.tmp"
+    
+    local count
+    count=$(wc -l < "$CACHE_FILE")
+    echo -e "${GREEN}Scan complete. Found $count repositories.${NC}"
+    sleep 1
+}
+
 if [ ! -s "$CACHE_FILE" ]; then
     echo -e "${BLUE}First run - scanning for repositories...${NC}"
     refresh_cache
@@ -1015,28 +1037,6 @@ show_work_summary() {
 # Core Functions
 # ============================================================
 
-refresh_cache() {
-    echo -e "${BLUE}Scanning for Git repositories in $HOME...${NC}"
-    
-    find "$HOME/Work" "$HOME/Plugins" "$HOME/Documents" "$HOME/Desktop" "$HOME/Luminor" -maxdepth 4 -name ".git" -type d 2>/dev/null > "$CACHE_FILE.tmp"
-    
-    find "$HOME" -maxdepth 4 -name ".git" -type d \
-        -not -path "$HOME/.cache/*" \
-        -not -path "$HOME/.local/share/*" \
-        -not -path "$HOME/.npm/*" \
-        -not -path "$HOME/.cargo/*" \
-        -not -path "$HOME/.rustup/*" \
-        2>/dev/null >> "$CACHE_FILE.tmp"
-    
-    cat "$CACHE_FILE.tmp" | rev | cut -d'/' -f2- | rev | sort | uniq > "$CACHE_FILE"
-    rm -f "$CACHE_FILE.tmp"
-    
-    local count
-    count=$(wc -l < "$CACHE_FILE")
-    echo -e "${GREEN}Scan complete. Found $count repositories.${NC}"
-    sleep 1
-}
-
 clone_repo() {
     echo -n "Enter Repository URL (HTTPS or SSH): "
     read -r url
@@ -1265,8 +1265,8 @@ merge_branch() {
 
 while true; do
     clear
-    local current_version=$(cat "$HOME/.config/gity/VERSION" 2>/dev/null || echo "1.0.0")
-    local update_status=$(check_for_update)
+    current_version=$(cat "$HOME/.config/gity/VERSION" 2>/dev/null || echo "1.0.0")
+    update_status=$(check_for_update)
     
     echo -e "${BLUE}╔═══════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║${NC}           ${BOLD}${WHITE}GITY${NC} ${DIM}-${NC} ${BOLD}TUI Git Hub${NC} ${DIM}v${current_version}${NC}             ${BLUE}║${NC}"
