@@ -1,0 +1,106 @@
+name: Test Windows Installer
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'install.ps1'
+      - 'gity.sh'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'install.ps1'
+      - 'gity.sh'
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Run installer
+        shell: pwsh
+        run: |
+          # Run the installer
+          ./install.ps1
+          
+          # Verify gity is in PATH
+          Write-Host "Checking gity.cmd exists..."
+          $gityCmd = Join-Path $env:LOCALAPPDATA "Programs\Gity\gity.cmd"
+          if (Test-Path $gityCmd) {
+              Write-Host "OK: gity.cmd exists"
+          } else {
+              Write-Host "FAIL: gity.cmd not found"
+              exit 1
+          }
+          
+          # Verify gity.sh exists
+          $gitySh = Join-Path $env:LOCALAPPDATA "Programs\Gity\gity.sh"
+          if (Test-Path $gitySh) {
+              Write-Host "OK: gity.sh exists"
+          } else {
+              Write-Host "FAIL: gity.sh not found"
+              exit 1
+          }
+          
+          # Verify dependencies
+          Write-Host "Checking dependencies..."
+          $deps = @("git", "fzf", "lazygit", "gh")
+          foreach ($dep in $deps) {
+              if (Get-Command $dep -ErrorAction SilentlyContinue) {
+                  Write-Host "OK: $dep installed"
+              } else {
+                  Write-Host "WARN: $dep not found (may need manual install)"
+              }
+          }
+          
+          Write-Host "Windows installer test complete!"
+
+  test-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git fzf
+      
+      - name: Run installer
+        run: |
+          chmod +x install.sh
+          ./install.sh
+      
+      - name: Verify installation
+        run: |
+          if command -v gity &>/dev/null; then
+              echo "OK: gity installed"
+          else
+              echo "FAIL: gity not in PATH"
+              exit 1
+          fi
+
+  test-macos:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Run installer
+        run: |
+          chmod +x install.sh
+          ./install.sh
+      
+      - name: Verify installation
+        run: |
+          if command -v gity &>/dev/null; then
+              echo "OK: gity installed"
+          else
+              echo "FAIL: gity not in PATH"
+              exit 1
+          fi
