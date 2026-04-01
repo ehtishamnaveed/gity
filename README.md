@@ -1,10 +1,11 @@
-
+```
   ██████╗ ██╗████████╗██╗   ██╗
  ██╔════╝ ██║╚══██╔══╝╚██╗ ██╔╝
  ██║  ███╗██║   ██║    ╚████╔╝ 
  ██║   ██║██║   ██║     ╚██╔╝  
  ╚██████╔╝██║   ██║      ██║   
   ╚═════╝ ╚═╝   ╚═╝      ╚═╝  
+  ```
 **A powerful, keyboard-driven TUI hub for managing all your Git repositories in one place.**
 
 No more hunting for repos across your filesystem. Gity automatically discovers all your Git repositories and brings them together with beautiful visualizations, status indicators, cross-repo search, bulk actions, and GitHub integration.
