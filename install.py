@@ -67,15 +67,14 @@ def install():
     install_dir.mkdir(parents=True, exist_ok=True)
     bin_dir.mkdir(parents=True, exist_ok=True)
     
-    # 1. Copy gity.py to internal install dir
-    source_file = Path(__file__).parent / "gity.py"
-    if not source_file.exists():
-        # If running from a remote curl, we download it
-        print_color("Downloading gity.py...", BLUE)
-        url = "https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/gity.py"
+    # 1. Download gity.py to internal install dir
+    print_color("Downloading gity.py...", BLUE)
+    url = "https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/gity.py"
+    try:
         subprocess.run(["curl", "-sSL", url, "-o", str(install_dir / "gity.py")], check=True)
-    else:
-        shutil.copy(source_file, install_dir / "gity.py")
+    except subprocess.CalledProcessError as e:
+        print_color(f"✗ Failed to download gity.py: {e}", RED)
+        sys.exit(1)
     
     # 2. Create the global 'gity' keyword
     if platform.system() == "Windows":
