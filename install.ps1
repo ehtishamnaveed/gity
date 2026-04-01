@@ -254,7 +254,7 @@ function Install-Lazygit {
     }
     
     # Get latest lazygit URL from GitHub API
-    $lazygitUrl = Get-GitHubReleaseAsset -Repo "jesseduffield/lazygit" -Pattern "Windows_x86_64\.zip"
+    $lazygitUrl = Get-GitHubReleaseAsset -Repo "jesseduffield/lazygit" -Pattern "windows_x86_64\.zip"
     
     if (!$lazygitUrl) {
         Write-Warn "Could not find lazygit release. Please install manually from: https://github.com/jesseduffield/lazygit/releases"
