@@ -1,0 +1,73 @@
+name: Build Native Binaries
+
+on:
+  push:
+    branches: [ "native-binaries" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: gity-linux
+            asset_name: gity-linux
+          - os: macos-latest
+            artifact_name: gity-macos
+            asset_name: gity-macos
+          - os: windows-latest
+            artifact_name: gity-windows.exe
+            asset_name: gity-windows.exe
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-name: '3.11'
+        
+    - name: Install PyInstaller
+      run: pip install pyinstaller
+      
+    - name: Build with PyInstaller
+      run: |
+        pyinstaller --onefile --name gity gity.py
+        
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: dist/gity*
+        
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      - name: List artifacts
+        run: ls -R artifacts
+        
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-binaries
+          name: Latest Native Binaries
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/gity-linux/gity
+            artifacts/gity-macos/gity
+            artifacts/gity-windows.exe/gity.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
