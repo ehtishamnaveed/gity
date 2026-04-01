@@ -104,3 +104,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\nError during installation: {e}")
         sys.exit(1)
+# Cache buster: Wed Apr  1 11:09:48 PM PKT 2026
