@@ -337,9 +337,29 @@ def repo_actions(repo_path):
 
 def open_existing():
     if not CACHE_FILE.exists(): refresh_cache()
+    
+    try:
+        with open(RECENT_FILE, "r") as f: recent = f.read().splitlines()
+    except FileNotFoundError: recent = []
+    
     with open(CACHE_FILE, "r") as f: repos = f.read().splitlines()
-    selected = run_fzf(repos, header="Select Repository", height='60%')
-    if selected: repo_actions(selected)
+    
+    combined = []
+    seen = set()
+    for r in recent + repos:
+        if r and r not in seen:
+            combined.append(r)
+            seen.add(r)
+            
+    options = []
+    for r in combined:
+        status = get_repo_status_simple(r)
+        options.append(f"{status} {os.path.basename(r)}  ({r})")
+        
+    selected = run_fzf(options, header="Select Repository (Recent at top)", height='60%')
+    if selected:
+        repo_path = selected.split("  (")[-1].rstrip(")")
+        repo_actions(repo_path)
 
 def show_dashboard():
     if not CACHE_FILE.exists(): refresh_cache()
