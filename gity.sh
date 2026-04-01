@@ -436,11 +436,19 @@ github_repos() {
     if ! gh auth status &>/dev/null; then
         echo -e "${YELLOW}Not authenticated with GitHub.${NC}"
         echo ""
-        echo -e "${BLUE}Run: gh auth login${NC}"
-        echo ""
-        echo "Press Enter to continue..."
-        read -r
-        return
+        local auth_choice
+        auth_choice=$(echo -e "🔗 Connect to GitHub\n❌ Cancel" | fzf --height 15% --border --prompt="Connect > " || true)
+        
+        if [ "$auth_choice" = "🔗 Connect to GitHub" ]; then
+            gh auth login
+            if ! gh auth status &>/dev/null; then
+                echo -e "${RED}Authentication failed.${NC}"
+                sleep 2
+                return
+            fi
+        else
+            return
+        fi
     fi
     
     local user login
