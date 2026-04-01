@@ -11,6 +11,48 @@ WHITE='\033[1;37m'
 DIM='\033[2m'
 NC='\033[0m'
 
+VERSION_FILE_URL="https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/VERSION"
+GITY_SCRIPT_URL="https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/gity.sh"
+
+get_latest_version() {
+    curl -sSL "$VERSION_FILE_URL" 2>/dev/null || echo ""
+}
+
+check_for_update() {
+    local current_version
+    current_version=$(cat "$HOME/.config/gity/VERSION" 2>/dev/null || echo "0.0.0")
+    
+    local latest_version
+    latest_version=$(get_latest_version)
+    
+    if [ -n "$latest_version" ] && [ "$current_version" != "$latest_version" ]; then
+        echo "update_available"
+    else
+        echo "up_to_date"
+    fi
+}
+
+update_gity() {
+    echo -e "${BLUE}Updating Gity...${NC}"
+    
+    local install_dir="$HOME/.local/bin"
+    local new_version=$(get_latest_version)
+    
+    if curl -sSL "$GITY_SCRIPT_URL" -o "$install_dir/gity.tmp"; then
+        mv "$install_dir/gity.tmp" "$install_dir/gity"
+        chmod +x "$install_dir/gity"
+        mkdir -p "$HOME/.config/gity"
+        echo "$new_version" > "$HOME/.config/gity/VERSION"
+        
+        echo -e "${GREEN}✅ Updated to v$new_version${NC}"
+        echo -e "${BLUE}Please restart Gity to use the new version.${NC}"
+        sleep 3
+    else
+        echo -e "${RED}❌ Update failed. Please try again.${NC}"
+        sleep 2
+    fi
+}
+
 REQUIRED_DEPS="git fzf lazygit"
 CLIPBOARD_DEPS="xclip xsel wl-copy clip.exe clip"
 
@@ -1223,10 +1265,18 @@ merge_branch() {
 
 while true; do
     clear
+    local current_version=$(cat "$HOME/.config/gity/VERSION" 2>/dev/null || echo "1.0.0")
+    local update_status=$(check_for_update)
+    
     echo -e "${BLUE}╔═══════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC}           ${BOLD}${WHITE}GITY${NC} ${DIM}-${NC} ${BOLD}TUI Git Hub${NC}               ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}           ${BOLD}${WHITE}GITY${NC} ${DIM}-${NC} ${BOLD}TUI Git Hub${NC} ${DIM}v${current_version}${NC}             ${BLUE}║${NC}"
     echo -e "${BLUE}╚═══════════════════════════════════════════════════╝${NC}"
     echo ""
+    
+    if [ "$update_status" = "update_available" ]; then
+        echo -e "  ${YELLOW}🔔 Update available! Run 'gity-update' to upgrade.${NC}"
+    fi
+    
     echo -e "  ${BOLD}Status Indicators:${NC}  ${GREEN}●${NC} Clean  ${YELLOW}✎${NC} Changes  ${CYAN}↑${NC} Ahead  ${RED}↓${NC} Behind  ${MAGENTA}↕${NC} Diverged"
     echo ""
     
@@ -1240,6 +1290,7 @@ while true; do
 🔗 Clone Repository
 ✨ Create New Repository
 🔄 Refresh Cache
+↻ Update Gity
 ❌ Exit" | fzf --height 50% --layout=reverse --border --prompt="Main Menu > " || true)
     
     case "$choice" in
@@ -1279,6 +1330,9 @@ while true; do
             ;;
         "🔄 Refresh Cache")
             refresh_cache
+            ;;
+        "↻ Update Gity")
+            update_gity
             ;;
         *)
             exit 0
