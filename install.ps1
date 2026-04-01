@@ -1,6 +1,7 @@
 # Gity Windows Installer
 # One-command setup for Windows users
 # Uses PowerShell native commands - no curl, no winget
+# Fetches latest release URLs from GitHub API
 # Usage: irm https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.ps1 | iex
 
 $InstallDir = Join-Path $env:LOCALAPPDATA "Programs\Gity"
@@ -40,7 +41,7 @@ function Download-File {
     )
     
     try {
-        # Use PowerShell native download
+        Write-Step "Downloading: $Url"
         Invoke-WebRequest -Uri $Url -UseBasicParsing -OutFile $OutputPath
         return $true
     } catch {
@@ -71,6 +72,29 @@ function Add-ToPath {
     }
 }
 
+function Get-GitHubReleaseAsset {
+    param(
+        [string]$Repo,
+        [string]$Pattern
+    )
+    
+    try {
+        $apiUrl = "https://api.github.com/repos/$Repo/releases/latest"
+        $headers = @{ "Accept" = "application/vnd.github.v3+json" }
+        $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers -UseBasicParsing
+        
+        $asset = $release.assets | Where-Object { $_.name -match $Pattern } | Select-Object -First 1
+        
+        if ($asset) {
+            return $asset.browser_download_url
+        }
+        return $null
+    } catch {
+        Write-Err "Failed to fetch release info from $Repo`: $_"
+        return $null
+    }
+}
+
 function Install-Git {
     if (Check-Command "git") {
         Write-Success "git already installed"
@@ -84,9 +108,16 @@ function Install-Git {
         New-Item -ItemType Directory -Path $gitDir -Force | Out-Null
     }
     
-    # Download Git portable
+    # Get latest Git portable URL from GitHub API
     $arch = if ([Environment]::Is64BitOperatingSystem) { "64" } else { "32" }
-    $gitUrl = "https://github.com/git-for-windows/git/releases/latest/download/PortableGit-${arch}-bit.7z.exe"
+    $gitUrl = Get-GitHubReleaseAsset -Repo "git-for-windows/git" -Pattern "PortableGit-${arch}-bit.*\.7z\.exe"
+    
+    if (!$gitUrl) {
+        Write-Warn "Could not find Git portable release. Please install manually from: https://git-scm.com/download/win"
+        return $false
+    }
+    
+    Write-Step "Downloading Git portable..."
     $tempGit = Join-Path $env:TEMP "git-portable.exe"
     
     if (!(Download-File -Url $gitUrl -OutputPath $tempGit)) {
@@ -126,11 +157,19 @@ function Install-Fzf {
         New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
     }
     
-    $fzfUrl = "https://github.com/junegunn/fzf/releases/latest/download/fzf-0.70.0-windows_amd64.zip"
+    # Get latest fzf URL from GitHub API
+    $fzfUrl = Get-GitHubReleaseAsset -Repo "junegunn/fzf" -Pattern "windows_amd64\.zip"
+    
+    if (!$fzfUrl) {
+        Write-Warn "Could not find fzf release. Please install manually from: https://github.com/junegunn/fzf/releases"
+        return $false
+    }
+    
+    Write-Step "Downloading fzf..."
     $tempZip = Join-Path $env:TEMP "fzf.zip"
     
     if (!(Download-File -Url $fzfUrl -OutputPath $tempZip)) {
-        Write-Warn "Could not download fzf. Please install manually: winget install junegunn.fzf"
+        Write-Warn "Could not download fzf"
         return $false
     }
     
@@ -169,11 +208,19 @@ function Install-Gh {
         New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
     }
     
-    $ghUrl = "https://github.com/cli/cli/releases/latest/download/gh_2.70.0_windows_amd64.zip"
+    # Get latest gh CLI URL from GitHub API
+    $ghUrl = Get-GitHubReleaseAsset -Repo "cli/cli" -Pattern "windows_amd64\.zip"
+    
+    if (!$ghUrl) {
+        Write-Warn "Could not find gh CLI release. Please install manually from: https://github.com/cli/cli/releases"
+        return $false
+    }
+    
+    Write-Step "Downloading gh CLI..."
     $tempZip = Join-Path $env:TEMP "gh.zip"
     
     if (!(Download-File -Url $ghUrl -OutputPath $tempZip)) {
-        Write-Warn "Could not download gh CLI. Please install manually: winget install GitHub.cli"
+        Write-Warn "Could not download gh CLI"
         return $false
     }
     
@@ -215,11 +262,19 @@ function Install-Lazygit {
         New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
     }
     
-    $lazygitUrl = "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_0.59.0_Windows_x86_64.zip"
+    # Get latest lazygit URL from GitHub API
+    $lazygitUrl = Get-GitHubReleaseAsset -Repo "jesseduffield/lazygit" -Pattern "Windows_x86_64\.zip"
+    
+    if (!$lazygitUrl) {
+        Write-Warn "Could not find lazygit release. Please install manually from: https://github.com/jesseduffield/lazygit/releases"
+        return $false
+    }
+    
+    Write-Step "Downloading lazygit..."
     $tempZip = Join-Path $env:TEMP "lazygit.zip"
     
     if (!(Download-File -Url $lazygitUrl -OutputPath $tempZip)) {
-        Write-Warn "Could not download lazygit. Please install manually: winget install JesseDuffield.lazygit"
+        Write-Warn "Could not download lazygit"
         return $false
     }
     
