@@ -295,11 +295,23 @@ bulk_actions() {
     echo -e "${BLUE}Select repositories for bulk action (TAB to multi-select):${NC}"
     echo ""
     
-    local formatted
-    formatted=$(format_repos_with_status <(echo "$all_repos"))
+    local temp_input
+    temp_input=$(mktemp)
+    while IFS= read -r repo; do
+        if [ -d "$repo/.git" ]; then
+            local status
+            status=$(get_repo_status_simple "$repo")
+            local name
+            name=$(basename "$repo")
+            local rel_path
+            rel_path="${repo#$HOME/}"
+            echo "${status} ${name}  ~/${rel_path}"
+        fi
+    done <<< "$all_repos" > "$temp_input"
     
     local selected
-    selected=$(echo "$formatted" | fzf --height 70% --border --header="Select repos (TAB for multi-select)" --prompt="Select > " --multi || true)
+    selected=$(cat "$temp_input" | fzf --height 70% --border --header="Select repos (TAB for multi-select)" --prompt="Select > " --multi || true)
+    rm -f "$temp_input"
     
     if [ -z "$selected" ]; then
         return
@@ -308,10 +320,10 @@ bulk_actions() {
     local repos
     while IFS= read -r line; do
         local name
-        name=$(echo "$line" | sed 's/^[^*↓↑↕✎●]*\s\+//' | awk '{print $1}')
+        name=$(echo "$line" | awk '{print $2}')
         if [ -n "$name" ]; then
             local repo_path
-            repo_path=$(grep -F "/${name}" "$CACHE_FILE" | awk -F/ '{if ($NF == "'"${name}"'") print}' | head -1)
+            repo_path=$(grep -F "/${name}" "$CACHE_FILE" | head -1)
             if [ -n "$repo_path" ]; then
                 repos="$repos
 $repo_path"
