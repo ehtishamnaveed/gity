@@ -180,29 +180,50 @@ function Install-Git {
     
     Write-Step "Installing git..."
     
-    # Download Git for Windows installer
-    $gitUrl = "https://github.com/git-for-windows/git/releases/latest/download/Git-64-bit.exe"
-    $gitInstaller = Join-Path $env:TEMP "git-installer.exe"
+    # Detect architecture
+    $arch = if ([Environment]::Is64BitOperatingSystem) { "64" } else { "32" }
+    Write-Step "Detected architecture: ${arch}-bit"
     
-    if (!(Download-File -Url $gitUrl -OutputPath $gitInstaller)) {
-        Write-Err "Failed to download Git installer"
+    # Download Git for Windows portable (no installer needed)
+    $gitUrl = "https://github.com/git-for-windows/git/releases/latest/download/PortableGit-${arch}-bit.7z.exe"
+    $gitPortable = Join-Path $InstallDir "git"
+    
+    if (!(Test-Path $gitPortable)) {
+        New-Item -ItemType Directory -Path $gitPortable -Force | Out-Null
+    }
+    
+    $tempGit = Join-Path $env:TEMP "git-portable.exe"
+    
+    if (!(Download-File -Url $gitUrl -OutputPath $tempGit)) {
+        Write-Err "Failed to download Git portable"
+        Write-Warn "Please install Git manually from: https://git-scm.com/download/win"
         return $false
     }
     
-    Write-Step "Running Git installer (silent)..."
-    $process = Start-Process -FilePath $gitInstaller -ArgumentList "/VERYSILENT", "/NORESTART", "/NOCANCEL", "/SP-" -Wait -PassThru -NoNewWindow
+    Write-Step "Extracting Git to $gitPortable..."
     
-    if (Test-Path $gitInstaller) { Remove-Item $gitInstaller -Force }
-    
-    if ($process.ExitCode -eq 0) {
-        # Refresh PATH
-        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
-        Write-Success "Git installed successfully"
+    try {
+        # Git portable is a self-extracting 7z archive
+        # Use 7z or PowerShell to extract
+        Expand-Archive -Path $tempGit -DestinationPath $gitPortable -Force -ErrorAction Stop
+        
+        # Add git bin to PATH
+        $gitBin = Join-Path $gitPortable "bin"
+        if (Test-Path $gitBin) {
+            Add-ToPath $gitBin
+            $env:PATH = "$env:PATH;$gitBin"
+        }
+        
+        Write-Success "Git installed successfully (portable)"
         return $true
-    } else {
-        Write-Err "Git installation failed (exit code: $($process.ExitCode))"
-        return $false
+    } catch {
+        Write-Warn "Could not extract Git portable: $_"
+        Write-Warn "Please install Git manually from: https://git-scm.com/download/win"
+    } finally {
+        if (Test-Path $tempGit) { Remove-Item $tempGit -Force -ErrorAction SilentlyContinue }
     }
+    
+    return $false
 }
 
 function Install-Fzf {
