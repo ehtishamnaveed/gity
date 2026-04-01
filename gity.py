@@ -411,7 +411,7 @@ def github_repos():
     if not shutil.which("gh"): print("gh CLI missing"); return
     user = run_command(["gh", "api", "user", "--jq", ".login"])
     orgs = run_command(["gh", "api", "user/orgs", "--jq", ".[].login"]).splitlines()
-    options = [f"👤 {user}"] + [f"🏢 {o}" for l in orgs]
+    options = [f"👤 {user}"] + [f"🏢 {o}" for o in orgs]
     ent = run_fzf(options, header="Select User/Org", height='40%')
     if not ent: return
     name = ent.split(" ")[1]
