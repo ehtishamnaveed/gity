@@ -3,6 +3,8 @@ import subprocess
 import shutil
 import sys
 import time
+import json
+import threading
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -27,7 +29,11 @@ RECENT_FILE = CACHE_DIR / "lazygit_recent"
 CONFIG_DIR = HOME / ".config" / "gity"
 VERSION_FILE = CONFIG_DIR / "VERSION"
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
+
+# Global state for background PR fetching
+pr_counts = {}
+pr_fetching_active = False
 
 # Ensure directories exist
 REPO_DIR.mkdir(parents=True, exist_ok=True)
@@ -45,10 +51,10 @@ def run_command(cmd, cwd=None, capture=True):
             result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, shell=isinstance(cmd, str))
             return result.stdout.strip()
         else:
-            subprocess.run(cmd, cwd=cwd, shell=isinstance(cmd, str))
-            return ""
+            res = subprocess.run(cmd, cwd=cwd, shell=isinstance(cmd, str))
+            return res.returncode
     except Exception:
-        return ""
+        return "" if capture else 1
 
 def run_fzf(options, header="Select an option", multi=False, preview=None, height='60%', layout='reverse'):
     """Run fzf with given options and return selection."""
@@ -72,10 +78,174 @@ def run_fzf(options, header="Select an option", multi=False, preview=None, heigh
 def box_draw(width, char='='):
     return char * width
 
+# ============================================================
+# GITHUB PR LOGIC
+# ============================================================
+
+def get_repo_pr_count(repo_path):
+    """Fetch open PR count for a repository using gh CLI."""
+    if not shutil.which("gh"):
+        return 0
+    try:
+        remote = run_command(["git", "remote", "get-url", "origin"], cwd=repo_path)
+        if not remote or "github.com" not in remote:
+            return 0
+            
+        prs_json = run_command(["gh", "pr", "list", "--limit", "50", "--json", "number"], cwd=repo_path)
+        if prs_json:
+            prs = json.loads(prs_json)
+            return len(prs)
+    except Exception:
+        pass
+    return 0
+
+def fetch_pr_counts_background():
+    """Background task to fetch PR counts for all repos."""
+    global pr_counts, pr_fetching_active
+    if pr_fetching_active:
+        return
+    
+    pr_fetching_active = True
+    try:
+        if not CACHE_FILE.exists():
+            return
+        with open(CACHE_FILE, "r") as f:
+            repos = f.read().splitlines()
+        
+        for repo in repos:
+            if os.path.isdir(os.path.join(repo, ".git")):
+                count = get_repo_pr_count(repo)
+                if count > 0:
+                    pr_counts[repo] = count
+    finally:
+        pr_fetching_active = False
+
+def start_pr_fetch():
+    thread = threading.Thread(target=fetch_pr_counts_background, daemon=True)
+    thread.start()
+
+def get_pr_diff_colored(repo_path, pr_number):
+    """Get PR diff and apply basic terminal colors."""
+    diff = run_command(["gh", "pr", "diff", str(pr_number)], cwd=repo_path)
+    colored_diff = ""
+    for line in diff.splitlines():
+        if line.startswith('+'):
+            colored_diff += f"{GREEN}{line}{NC}\n"
+        elif line.startswith('-'):
+            colored_diff += f"{RED}{line}{NC}\n"
+        elif line.startswith('@@'):
+            colored_diff += f"{CYAN}{line}{NC}\n"
+        elif line.startswith('diff --git'):
+            colored_diff += f"{BOLD}{WHITE}{line}{NC}\n"
+        else:
+            colored_diff += f"{line}\n"
+    return colored_diff
+
+def pr_detail_view(repo_path, pr_info):
+    """View PR diff and perform actions."""
+    pr_number = pr_info['number']
+    title = pr_info['title']
+    author = pr_info['author']['login']
+    
+    while True:
+        clear_screen()
+        print(f"{BLUE}╔{box_draw(60, '═')}╗{NC}")
+        print(f"{BLUE}║{NC} {BOLD}PR #{pr_number}:{NC} {title[:45]}")
+        print(f"{BLUE}║{NC} {DIM}Author: {author}{NC}")
+        print(f"{BLUE}╚{box_draw(60, '═')}╝{NC}\n")
+        
+        action_opts = [
+            "🔍 View Diff (Colored)",
+            "✅ Accept & Merge",
+            "💬 Send Message (Comment)",
+            "❌ Close Pull Request",
+            "🔙 Back"
+        ]
+        
+        choice = run_fzf(action_opts, header="Choose Action", height='20%')
+        
+        if not choice or "Back" in choice:
+            break
+        elif "View Diff" in choice:
+            clear_screen()
+            print(f"{BOLD}--- DIFF FOR PR #{pr_number} ---{NC}\n")
+            print(get_pr_diff_colored(repo_path, pr_number))
+            print(f"\n{DIM}Press Enter to return...{NC}")
+            input()
+        elif "Accept & Merge" in choice:
+            print(f"{BLUE}Merging PR #{pr_number}...{NC}")
+            res = subprocess.run(["gh", "pr", "merge", str(pr_number), "--merge"], cwd=repo_path)
+            if res.returncode == 0:
+                print(f"{GREEN}✓ PR merged successfully!{NC}")
+                time.sleep(2)
+                break
+        elif "Send Message" in choice:
+            msg = input("Enter comment: ").strip()
+            if msg:
+                subprocess.run(["gh", "pr", "comment", str(pr_number), "--body", msg], cwd=repo_path)
+                print(f"{GREEN}✓ Comment added.{NC}")
+                time.sleep(1)
+        elif "Close" in choice:
+            confirm = input(f"Are you sure you want to close PR #{pr_number}? (y/N): ")
+            if confirm.lower() == 'y':
+                subprocess.run(["gh", "pr", "close", str(pr_number)], cwd=repo_path)
+                print(f"{RED}PR closed.{NC}")
+                time.sleep(2)
+                break
+
+def pull_requests_menu():
+    """Main PR menu showing repos with open PRs."""
+    if not shutil.which("gh"):
+        print(f"{RED}gh CLI is required for Pull Requests.{NC}")
+        time.sleep(2)
+        return
+
+    if not CACHE_FILE.exists():
+        refresh_cache()
+        
+    with open(CACHE_FILE, "r") as f:
+        repos = f.read().splitlines()
+    
+    print(f"{BLUE}Scanning repositories for open Pull Requests...{NC}")
+    repo_with_prs = []
+    for repo in repos:
+        if os.path.isdir(os.path.join(repo, ".git")):
+            prs_json = run_command(["gh", "pr", "list", "--json", "number,title,author"], cwd=repo)
+            if prs_json:
+                prs = json.loads(prs_json)
+                if prs:
+                    repo_with_prs.append((repo, prs))
+    
+    if not repo_with_prs:
+        clear_screen()
+        print(f"\n{YELLOW}No open Pull Requests found in your cached repositories.{NC}")
+        time.sleep(2)
+        return
+
+    repo_opts = [f"{len(prs)} PRs | {os.path.basename(path)}  ({path})" for path, prs in repo_with_prs]
+    selected_repo_str = run_fzf(repo_opts, header="Select Repository with PRs", height='60%')
+    
+    if not selected_repo_str:
+        return
+        
+    repo_path = selected_repo_str.split("  (")[-1].rstrip(")")
+    prs = next(p for path, p in repo_with_prs if path == repo_path)
+    
+    pr_opts = [f"#{p['number']} | {p['title']} ({p['author']['login']})" for p in prs]
+    selected_pr_str = run_fzf(pr_opts, header=f"PRs in {os.path.basename(repo_path)}", height='60%')
+    
+    if selected_pr_str:
+        pr_number = int(selected_pr_str.split(" | ")[0].lstrip("#"))
+        pr_info = next(p for p in prs if p['number'] == pr_number)
+        pr_detail_view(repo_path, pr_info)
+
+# ============================================================
+# REPO SCANNING & STATUS
+# ============================================================
+
 def get_repo_status(repo_path):
-    """Get a simple status string for a repo."""
     if not (Path(repo_path) / ".git").exists():
-        return "?"
+        return {"status": "?", "has_changes": False, "ahead": 0, "behind": 0, "dirty_files": 0}
 
     status_indicators = ""
     has_changes = False
@@ -83,13 +253,11 @@ def get_repo_status(repo_path):
     behind = 0
     dirty_files = 0
 
-    # Check for changes
     changes = run_command(["git", "status", "--porcelain"], cwd=repo_path)
     if changes:
         has_changes = True
         dirty_files = len(changes.splitlines())
 
-    # Check ahead/behind
     revs = run_command("git rev-list --left-right --count '@{upstream}...HEAD'", cwd=repo_path)
     if revs:
         try:
@@ -99,35 +267,22 @@ def get_repo_status(repo_path):
         except ValueError:
             pass
 
-    if has_changes:
-        status_indicators += f"{YELLOW}✎{NC}"
-    else:
-        status_indicators += f"{GREEN}●{NC}"
+    if has_changes: status_indicators += f"{YELLOW}✎{NC}"
+    else: status_indicators += f"{GREEN}●{NC}"
 
-    if ahead > 0 and behind > 0:
-        status_indicators += f"{MAGENTA}↕{NC}"
-    elif ahead > 0:
-        status_indicators += f"{CYAN}↑{NC}"
-    elif behind > 0:
-        status_indicators += f"{RED}↓{NC}"
+    if ahead > 0 and behind > 0: status_indicators += f"{MAGENTA}↕{NC}"
+    elif ahead > 0: status_indicators += f"{CYAN}↑{NC}"
+    elif behind > 0: status_indicators += f"{RED}↓{NC}"
 
-    return {
-        "status": status_indicators,
-        "has_changes": has_changes,
-        "ahead": ahead,
-        "behind": behind,
-        "dirty_files": dirty_files
-    }
+    return {"status": status_indicators, "has_changes": has_changes, "ahead": ahead, "behind": behind, "dirty_files": dirty_files}
 
 def get_repo_status_simple(repo_path):
     return get_repo_status(repo_path)["status"]
 
 def refresh_cache():
-    """Scan filesystem for git repositories."""
     print(f"{BLUE}Scanning for repositories in {HOME}...{NC}")
     repos = []
-    
-    search_paths = [HOME / "Work", HOME / "Plugins", HOME / "Documents", HOME / "Desktop", HOME / "Luminor"]
+    search_paths = [HOME / "Work", HOME / "Plugins", HOME / "Documents", HOME / "Desktop"]
     valid_paths = [p for p in search_paths if p.exists()]
     
     def scan_dir(start_dir, max_depth=4):
@@ -138,632 +293,171 @@ def refresh_cache():
             if current_depth - start_depth > max_depth:
                 dirs[:] = []
                 continue
-            
             if '.git' in dirs:
                 repos.append(root)
                 dirs.remove('.git')
-                
             dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['node_modules', 'venv', 'target', 'build']]
 
-    for p in valid_paths:
-        scan_dir(p)
-    
+    for p in valid_paths: scan_dir(p)
     scan_dir(HOME, max_depth=3)
-
-    unique_repos = list(set(repos))
-    unique_repos.sort()
-
-    with open(CACHE_FILE, "w") as f:
-        f.write("\n".join(unique_repos))
-    
+    unique_repos = sorted(list(set(repos)))
+    with open(CACHE_FILE, "w") as f: f.write("\n".join(unique_repos))
     print(f"{GREEN}Scan complete. Found {len(unique_repos)} repositories.{NC}")
     time.sleep(1)
     return unique_repos
 
-def get_clipboard_tool():
-    tools = ["xclip", "xsel", "wl-copy", "clip.exe", "clip"]
-    for t in tools:
-        if shutil.which(t):
-            return t
-    return None
-
-def copy_path(path):
-    tool = get_clipboard_tool()
-    if not tool:
-        return False
-    
-    try:
-        if tool == "xclip":
-            subprocess.run(["xclip", "-selection", "clipboard"], input=path, text=True)
-        elif tool == "xsel":
-            subprocess.run(["xsel", "--clipboard"], input=path, text=True)
-        elif tool == "wl-copy":
-            subprocess.run(["wl-copy"], input=path, text=True)
-        else:
-            subprocess.run([tool], input=path, text=True)
-        return True
-    except Exception:
-        return False
+# ============================================================
+# ACTIONS
+# ============================================================
 
 def open_in_editor(repo_path):
-    editor = os.environ.get('EDITOR')
-    if editor:
-        subprocess.run([editor, "."], cwd=repo_path)
-    elif sys.platform == 'win32':
-        os.startfile(repo_path)
-    elif sys.platform == 'darwin':
-        subprocess.run(["open", repo_path])
-    else:
-        if shutil.which("wslview"):
-            subprocess.run(["wslview", repo_path])
-        else:
-            subprocess.run(["xdg-open", repo_path])
+    editor = os.environ.get('EDITOR', 'vi')
+    if sys.platform == 'win32': os.startfile(repo_path)
+    elif sys.platform == 'darwin': subprocess.run(["open", repo_path])
+    else: subprocess.run(["xdg-open", repo_path])
 
 def repo_actions(repo_path):
-    """Menu for actions on a specific repository."""
-    try:
-        with open(RECENT_FILE, "r") as f:
-            recent = f.read().splitlines()
-    except FileNotFoundError:
-        recent = []
-        
-    if repo_path in recent:
-        recent.remove(repo_path)
-    recent.insert(0, repo_path)
-    with open(RECENT_FILE, "w") as f:
-        f.write("\n".join(recent[:10]))
-        
     name = os.path.basename(repo_path)
-    status = get_repo_status_simple(repo_path)
-    has_clip = get_clipboard_tool() is not None
-    
-    actions = [
-        "🚀 Open in Lazygit (TUI)",
-        "📁 Browse Files (fzf)",
-        "📝 Open in Default Editor",
-        "📂 Open in File Manager"
-    ]
-    if has_clip:
-        actions.append("📋 Copy Path to Clipboard")
-    actions.append("🔙 Back to Gity")
-    
+    actions = ["🚀 Open in Lazygit (TUI)", "📁 Browse Files (fzf)", "📝 Open in Default Editor", "📂 Open in File Manager", "🔙 Back to Gity"]
     while True:
         clear_screen()
-        print(f"====================================================")
-        print(f"  {BOLD}{name}{NC}  {status}")
-        print(f"  PATH: {repo_path}")
-        print(f"====================================================\n")
-        print(f"{YELLOW}  Tip: Use 'Browse Files' to see all repo files{NC}\n")
-        
-        choice = run_fzf(actions, header=f"Select Action >", height='20%', layout='reverse')
-        
-        if not choice or "🔙" in choice:
-            break
-        elif "🚀" in choice:
-            subprocess.run(['lazygit', '-p', repo_path])
-        elif "📁" in choice:
+        status = get_repo_status_simple(repo_path)
+        print(f"====================================================\n  {BOLD}{name}{NC}  {status}\n  PATH: {repo_path}\n====================================================\n")
+        choice = run_fzf(actions, header=f"Select Action", height='20%')
+        if not choice or "Back" in choice: break
+        elif "Lazygit" in choice: subprocess.run(['lazygit', '-p', repo_path])
+        elif "Browse" in choice:
             git_ls = subprocess.Popen(["git", "ls-files"], cwd=repo_path, stdout=subprocess.PIPE, text=True)
-            fzf_cmd = ['fzf', '--height', '100%', '--border', '--header', f"Files in {name}", '--preview', f'cat {repo_path}/{{}}', '--preview-window', 'right:60%:wrap']
-            fzf_proc = subprocess.Popen(fzf_cmd, cwd=repo_path, stdin=git_ls.stdout, stdout=subprocess.PIPE, text=True)
-            git_ls.stdout.close()
-            fzf_proc.communicate()
-        elif "📝" in choice:
-            open_in_editor(repo_path)
-        elif "📂" in choice:
-            if sys.platform == 'darwin':
-                subprocess.run(['open', repo_path])
-            elif sys.platform == 'win32':
-                os.startfile(repo_path)
-            else:
-                subprocess.run(['xdg-open', repo_path])
-        elif "📋" in choice:
-            if copy_path(repo_path):
-                print("Path copied!")
-                time.sleep(1)
+            subprocess.run(['fzf', '--height', '100%', '--border', '--preview', f'cat {repo_path}/{{}}'], stdin=git_ls.stdout)
+        elif "Editor" in choice: open_in_editor(repo_path)
+        elif "Manager" in choice:
+            if sys.platform == 'darwin': subprocess.run(['open', repo_path])
+            elif sys.platform == 'win32': os.startfile(repo_path)
+            else: subprocess.run(['xdg-open', repo_path])
 
 def open_existing():
-    if not CACHE_FILE.exists() or os.path.getsize(CACHE_FILE) == 0:
-        refresh_cache()
-        
-    try:
-        with open(RECENT_FILE, "r") as f:
-            recent = f.read().splitlines()
-    except FileNotFoundError:
-        recent = []
-        
-    try:
-        with open(CACHE_FILE, "r") as f:
-            all_repos = f.read().splitlines()
-    except FileNotFoundError:
-        all_repos = []
-        
-    combined = []
-    seen = set()
-    for r in recent + all_repos:
-        if r and r not in seen:
-            combined.append(r)
-            seen.add(r)
-            
-    selected = run_fzf(combined, header="Select Repository (Recent at top)", height='60%', layout=None)
-    if selected:
-        repo_actions(selected)
+    if not CACHE_FILE.exists(): refresh_cache()
+    with open(CACHE_FILE, "r") as f: repos = f.read().splitlines()
+    selected = run_fzf(repos, header="Select Repository", height='60%')
+    if selected: repo_actions(selected)
 
 def show_dashboard():
-    if not CACHE_FILE.exists() or os.path.getsize(CACHE_FILE) == 0:
-        refresh_cache()
-        
+    if not CACHE_FILE.exists(): refresh_cache()
     print(f"{BLUE}Scanning repos for status...{NC}")
-    
-    try:
-        with open(CACHE_FILE, "r") as f:
-            all_repos = f.read().splitlines()
-    except FileNotFoundError:
-        return
-        
-    critical = []
-    warning = []
-    healthy = []
-    
-    for repo in all_repos:
-        if not (Path(repo) / ".git").exists():
-            continue
-            
+    with open(CACHE_FILE, "r") as f: repos = f.read().splitlines()
+    critical, warning, healthy = [], [], []
+    for repo in repos:
+        if not os.path.exists(os.path.join(repo, ".git")): continue
         s = get_repo_status(repo)
-        name = os.path.basename(repo)
-        
-        line = f'{s["status"]} {BOLD}{name}{NC}'
-        
-        if s["has_changes"] or (s["ahead"] > 0 and s["behind"] > 0):
-            details = []
-            if s["has_changes"]: details.append(f"{s['dirty_files']} file(s) changed")
-            if s["ahead"] > 0: details.append(f"{s['ahead']}↑")
-            if s["behind"] > 0: details.append(f"{s['behind']}↓")
-            line += f"  {DIM}{', '.join(details)}{NC}"
-            critical.append(line)
-        elif s["ahead"] > 0 or s["behind"] > 0:
-            details = []
-            if s["ahead"] > 0: details.append(f"{s['ahead']} ahead")
-            if s["behind"] > 0: details.append(f"{s['behind']} behind")
-            line += f"  {DIM}{', '.join(details)}{NC}"
-            warning.append(line)
-        else:
-            line += f"  {DIM}All synced{NC}"
-            healthy.append(line)
-            
+        line = f'{s["status"]} {BOLD}{os.path.basename(repo)}{NC}'
+        if s["has_changes"]: critical.append(line + f"  {DIM}{s['dirty_files']} files{NC}")
+        elif s["ahead"] or s["behind"]: warning.append(line + f"  {DIM}{s['ahead']}↑ {s['behind']}↓{NC}")
+        else: healthy.append(line)
     clear_screen()
-    print(f"\n{BLUE}╔════════════════════════════════════════╗{NC}")
-    print(f"{BLUE}║{NC}        {BOLD}📊 DASHBOARD{NC}                    {BLUE}║{NC}")
-    print(f"{BLUE}╚════════════════════════════════════════╝{NC}\n")
-    print(f"  Total repos scanned: {len(all_repos)}\n")
-    
+    print(f"\n{BLUE}📊 DASHBOARD{NC}\n  Critical: {len(critical)} | Warning: {len(warning)} | Synced: {len(healthy)}\n")
     if critical:
-        print(f"  {RED}🔴 NEED ATTENTION ({len(critical)} repos){NC}")
-        for c in critical: print(f"    {c}")
-        print("")
-        
-    if warning:
-        print(f"  {YELLOW}🟡 NEED SYNC ({len(warning)} repos){NC}")
-        for w in warning: print(f"    {w}")
-        print("")
-        
-    if healthy:
-        print(f"  {GREEN}🟢 ALL SYNCED ({len(healthy)} repos){NC}\n")
-        
-    print(f"{DIM}  Legend: {GREEN}●{NC} Clean  {YELLOW}✎{NC} Changes  {CYAN}↑{NC} Ahead  {RED}↓{NC} Behind  {MAGENTA}↕{NC} Diverged{NC}\n")
-    print(f"{DIM}  Press Enter to return to menu...{NC}")
+        print(f"  {RED}🔴 NEED ATTENTION{NC}")
+        for l in critical: print(f"    {l}")
+    print(f"\n{DIM}Press Enter to return...{NC}")
     input()
 
 def show_activity_timeline(days=7):
-    if not CACHE_FILE.exists() or os.path.getsize(CACHE_FILE) == 0:
-        refresh_cache()
-        
-    print(f"{BLUE}Fetching activity for last {days} days...{NC}")
-    
-    try:
-        with open(CACHE_FILE, "r") as f:
-            all_repos = f.read().splitlines()
-    except FileNotFoundError:
-        return
-        
-    commits_data = []
-    
-    for repo in all_repos:
-        if not (Path(repo) / ".git").exists():
-            continue
-        name = os.path.basename(repo)
-        
-        logs = run_command(["git", "log", f"--since={days} days ago", "--format=%h|%s|%ai"], cwd=repo)
+    if not CACHE_FILE.exists(): refresh_cache()
+    with open(CACHE_FILE, "r") as f: repos = f.read().splitlines()
+    commits = []
+    for repo in repos:
+        logs = run_command(["git", "log", f"--since={days} days ago", "--format=%ai|%s|%an"], cwd=repo)
         if logs:
             for line in logs.splitlines():
                 parts = line.split('|')
-                if len(parts) >= 3:
-                    hash_val, msg, date = parts[0], parts[1], parts[2]
-                    day = date.split()[0]
-                    commits_data.append((date, day, name, msg))
-                    
-    commits_data.sort(key=lambda x: x[0], reverse=True)
-    
+                if len(parts) >= 3: commits.append((parts[0], os.path.basename(repo), parts[1]))
+    commits.sort(reverse=True)
     clear_screen()
-    width = 65
-    print(f"{BLUE}╔{box_draw(width, '═')}╗{NC}")
-    print(f"{BLUE}║{NC}" + " "*int((width - 24)/2 + 2) + f"{BOLD}📅 ACTIVITY TIMELINE{NC}" + " "*int((width - 24)/2 + 2) )
-    print(f"{BLUE}║{NC}" + " "*int((width - 15)/2 + 2) + f"{DIM}(Last {days} days){NC}")
-    print(f"{BLUE}╠{box_draw(width, '═')}╣{NC}")
-    print(f"{BLUE}║{NC}  Total: {len(commits_data)} commits across all repos")
-    print(f"{BLUE}╠{box_draw(width, '═')}╣{NC}")
-    
-    if not commits_data:
-        print(f"{BLUE}║{NC}           {YELLOW}No recent activity{NC}")
-    else:
-        current_day = ""
-        for date, day, repo, msg in commits_data:
-            if day != current_day:
-                current_day = day
-                print(f"{BLUE}║{NC}{box_draw(width, ' ')}")
-                print(f"{BLUE}║{NC}  {BOLD}{day}{NC}")
-                print(f"{BLUE}║{NC}{box_draw(width, ' ')}")
-            short_msg = msg[:45]
-            print(f"{BLUE}║{NC}    {CYAN}{repo}{NC}  {short_msg}")
-            
-    print(f"{BLUE}╚{box_draw(width, '═')}╝{NC}")
-    
-    options = ["1 Day", "7 Days", "30 Days", "Exit"]
-    selected = run_fzf(options, header="Timeline range > ", height='20%', layout=None)
-    
-    if selected == "1 Day": show_activity_timeline(1)
-    elif selected == "7 Days": show_activity_timeline(7)
-    elif selected == "30 Days": show_activity_timeline(30)
+    print(f"{BLUE}📅 ACTIVITY TIMELINE (Last {days} days){NC}\n")
+    for date, repo, msg in commits[:20]:
+        print(f"  {CYAN}{repo}{NC} {DIM}{date[:10]}{NC} {msg[:50]}")
+    print(f"\n{DIM}Press Enter to return...{NC}")
+    input()
 
 def search_repos():
     query = input("Enter search query: ").strip()
-    if not query:
-        return
-        
-    if not CACHE_FILE.exists() or os.path.getsize(CACHE_FILE) == 0:
-        refresh_cache()
-        
-    try:
-        with open(CACHE_FILE, "r") as f:
-            all_repos = f.read().splitlines()
-    except FileNotFoundError:
-        return
-        
-    print(f"\n{BLUE}Searching {len(all_repos)} repos for: {query}{NC}\n")
-    
-    results_list = []
-    
-    for repo in all_repos:
-        if not (Path(repo) / ".git").exists():
-            continue
-        
-        name = os.path.basename(repo)
-        res = run_command(["git", "grep", "-n", "--heading", "--line-number", "--column", query], cwd=repo)
+    if not query: return
+    if not CACHE_FILE.exists(): refresh_cache()
+    with open(CACHE_FILE, "r") as f: repos = f.read().splitlines()
+    results = []
+    for repo in repos:
+        res = run_command(["git", "grep", "-n", query], cwd=repo)
         if res:
-            for line in res.splitlines():
-                if line:
-                    results_list.append(f"{name}: {line}  ({repo})")
-                    
-    if not results_list:
-        print(f"{YELLOW}No results found for: {query}{NC}")
-        time.sleep(2)
-        return
-        
-    selected = run_fzf(results_list, header=f"Search results for: {query}", height='80%', layout=None)
-    if selected:
-        repo_path = selected.split("  (")[-1].rstrip(")")
-        repo_actions(repo_path)
+            for line in res.splitlines(): results.append(f"{os.path.basename(repo)}: {line} ({repo})")
+    selected = run_fzf(results, header=f"Search: {query}", height='80%')
+    if selected: repo_actions(selected.split(" (")[-1].rstrip(")"))
 
 def bulk_actions():
-    if not CACHE_FILE.exists() or os.path.getsize(CACHE_FILE) == 0:
-        refresh_cache()
-        
-    try:
-        with open(CACHE_FILE, "r") as f:
-            all_repos = f.read().splitlines()
-    except FileNotFoundError:
-        return
-        
-    print(f"{BLUE}Select repositories for bulk action (TAB to multi-select):{NC}\n")
-    
-    options = []
-    for r in all_repos:
-        if (Path(r) / ".git").exists():
-            options.append(f"~/{Path(r).relative_to(HOME, walk_up=True)}")
-            
-    selected_str = run_fzf(options, header="Select repos (TAB for multi-select)", multi=True, height='70%', layout=None)
-    if not selected_str:
-        return
-        
-    selected_repos = []
-    for line in selected_str.splitlines():
-        rel_path = line.replace("~/", "")
-        repo_path = HOME / rel_path
-        if repo_path.exists():
-            selected_repos.append(str(repo_path))
-            
-    if not selected_repos:
-        return
-        
-    print(f"\n{BLUE}Choose bulk action:{NC}\n")
-    action_opts = [
-        "⬇️  Pull All",
-        "⬆️  Push All",
-        "📊 Status All",
-        "💬 Commit All",
-        "🔍 Custom Command (per repo)"
-    ]
-    
-    action = run_fzf(action_opts, header="Action > ", height='25%', layout=None)
-    if not action:
-        return
-        
-    success = 0
-    failed = 0
-    
-    if "Pull All" in action:
-        print(f"{BLUE}Pulling all repos...{NC}")
-        for r in selected_repos:
-            print(f"{CYAN}Pulling: {os.path.basename(r)}{NC}")
-            res = subprocess.run(["git", "pull"], cwd=r, capture_output=True, text=True)
-            if res.returncode == 0: success += 1
-            else: failed += 1
-            print(res.stdout.strip())
-            print(res.stderr.strip())
-            
-    elif "Push All" in action:
-        print(f"{BLUE}Pushing all repos...{NC}")
-        for r in selected_repos:
-            print(f"{CYAN}Pushing: {os.path.basename(r)}{NC}")
-            res = subprocess.run(["git", "push"], cwd=r, capture_output=True, text=True)
-            if res.returncode == 0: success += 1
-            else: failed += 1
-            print(res.stdout.strip())
-            print(res.stderr.strip())
-            
-    elif "Status All" in action:
-        for r in selected_repos:
-            print(f"{BOLD}=== {os.path.basename(r)} ==={NC}")
-            subprocess.run(["git", "status", "--short"], cwd=r)
-            print("")
-        input("Press Enter to continue...")
-        return
-        
-    elif "Commit All" in action:
-        msg = input("Enter commit message: ").strip()
-        if msg:
-            for r in selected_repos:
-                print(f"{CYAN}Committing: {os.path.basename(r)}{NC}")
-                subprocess.run(["git", "add", "-A"], cwd=r)
-                subprocess.run(["git", "commit", "-m", msg], cwd=r)
-                
-    elif "Custom Command" in action:
-        cmd = input("Enter command (use {repo} for repo path): ").strip()
-        if cmd:
-            for r in selected_repos:
-                print(f"{CYAN}Running in: {os.path.basename(r)}{NC}")
-                actual_cmd = cmd.replace("{repo}", r)
-                subprocess.run(actual_cmd, shell=True, cwd=r)
-                
-    print(f"\n{GREEN}Done! {success} succeeded, {failed} failed{NC}")
-    time.sleep(2)
+    if not CACHE_FILE.exists(): refresh_cache()
+    with open(CACHE_FILE, "r") as f: repos = f.read().splitlines()
+    selected_str = run_fzf(repos, header="Select repos (TAB)", multi=True, height='70%')
+    if not selected_str: return
+    selected_repos = selected_str.splitlines()
+    action = run_fzf(["⬇️ Pull All", "⬆️ Push All", "📊 Status All"], header="Action", height='25%')
+    if not action: return
+    for r in selected_repos:
+        print(f"{CYAN}Processing: {os.path.basename(r)}{NC}")
+        if "Pull" in action: subprocess.run(["git", "pull"], cwd=r)
+        elif "Push" in action: subprocess.run(["git", "push"], cwd=r)
+        elif "Status" in action: subprocess.run(["git", "status", "-s"], cwd=r)
+    input("\nDone. Press Enter...")
 
 def github_repos():
-    if not shutil.which("gh"):
-        print(f"{YELLOW}GitHub CLI (gh) is not installed.{NC}")
-        print(f"{BLUE}To install:{NC}")
-        print(f"{GREEN}  Arch:       sudo pacman -S github-cli{NC}")
-        print(f"{GREEN}  Ubuntu:     sudo apt install gh{NC}")
-        print(f"{GREEN}  macOS:      brew install gh{NC}")
-        print(f"{GREEN}  Windows:    winget install GitHub.cli{NC}")
-        print(f"\n{BLUE}Or visit: https://cli.github.com{NC}")
-        input("\nPress Enter to continue...")
-        return
-        
-    status = subprocess.run(["gh", "auth", "status"], capture_output=True).returncode
-    if status != 0:
-        print(f"{YELLOW}Not authenticated with GitHub.{NC}")
-        choice = run_fzf(["🔗 Connect to GitHub", "❌ Cancel"], header="Connect > ", height='15%', layout=None)
-        if "Connect" in choice:
-            subprocess.run(["gh", "auth", "login"])
-            if subprocess.run(["gh", "auth", "status"], capture_output=True).returncode != 0:
-                print(f"{RED}Authentication failed.{NC}")
-                time.sleep(2)
-                return
-        else:
-            return
-            
-    print(f"{BLUE}Fetching your GitHub information...{NC}")
+    if not shutil.which("gh"): print("gh CLI missing"); return
     user = run_command(["gh", "api", "user", "--jq", ".login"])
-    orgs_raw = run_command(["gh", "api", "user/orgs", "--jq", ".[].login"])
-    orgs = orgs_raw.splitlines() if orgs_raw else []
-    
-    if not user:
-        print(f"{RED}Failed to fetch user info.{NC}")
-        time.sleep(2)
-        return
-        
-    entity_options = [f"👤 Your Repositories ({user})"]
-    for org in orgs:
-        entity_options.append(f"🏢 {org}")
-        
-    selected_entity = run_fzf(entity_options, header="Select Organization or User", height='40%', layout=None)
-    if not selected_entity:
-        return
-        
-    if "👤" in selected_entity:
-        entity_type = "user"
-        entity_name = user
-        print(f"{BLUE}Fetching your repositories...{NC}")
-    else:
-        entity_type = "org"
-        entity_name = selected_entity.replace("🏢 ", "")
-        print(f"{BLUE}Fetching {entity_name} repositories...{NC}")
-        
-    if entity_type == "user":
-        repos_json = run_command(["gh", "repo", "list", entity_name, "--limit", "100", "--json", "name,owner,url"])
-    else:
-        repos_json = run_command(["gh", "api", f"orgs/{entity_name}/repos?per_page=100", "--jq", "[.[] | {name: .name, owner: {login: .owner.login}, url: .html_url}]"])
-        
-    import json
-    try:
-        repos_data = json.loads(repos_json)
-    except Exception:
-        print(f"{RED}Failed to parse GitHub repos.{NC}")
-        time.sleep(2)
-        return
-        
-    if not repos_data:
-        print(f"{YELLOW}No repositories found.{NC}")
-        time.sleep(2)
-        return
-        
-    repo_options = [f"{r['owner']['login']}/{r['name']}" for r in repos_data]
-    selected_repo = run_fzf(repo_options, header=f"Repositories in {entity_name}", height='70%', layout=None)
-    
-    if not selected_repo:
-        return
-        
-    # Find the corresponding URL
-    full_name = selected_repo
-    url = next((r['url'] for r in repos_data if f"{r['owner']['login']}/{r['name']}" == full_name), None)
-    
-    if not url:
-        print(f"{RED}Error: URL not found for selected repository.{NC}")
-        time.sleep(2)
-        return
-        
-    print(f"\n{BLUE}Selected: {full_name}{NC}")
-    print(f"{BLUE}URL: {url}{NC}\n")
-    
-    action = run_fzf(["📥 Clone Repository", "🌐 Open in Browser", "📂 View on GitHub"], header="Action > ", height='20%', layout=None)
-    
-    if "Clone" in action:
-        dest_name = full_name.replace("/", "-")
-        dest = REPO_DIR / dest_name
-        if dest.exists():
-            print(f"{YELLOW}Repository already exists at: {dest}{NC}")
-            repo_actions(str(dest))
-        else:
-            clone_mode = run_fzf(["Fetch Default Branch Only", "Fetch All Branches"], header="Clone mode > ", height='15%', layout=None)
-            print(f"{BLUE}Cloning to: {dest}{NC}")
-            if clone_mode == "Fetch All Branches":
-                subprocess.run(["git", "clone", "--no-single-branch", url, str(dest)])
-            else:
-                subprocess.run(["git", "clone", url, str(dest)])
-            repo_actions(str(dest))
-    elif "Browser" in action or "View" in action:
-        if sys.platform == 'darwin': subprocess.run(['open', url])
-        elif sys.platform == 'win32': os.startfile(url)
-        else: subprocess.run(['xdg-open', url])
+    orgs = run_command(["gh", "api", "user/orgs", "--jq", ".[].login"]).splitlines()
+    options = [f"👤 {user}"] + [f"🏢 {o}" for l in orgs]
+    ent = run_fzf(options, header="Select User/Org", height='40%')
+    if not ent: return
+    name = ent.split(" ")[1]
+    repos_json = run_command(["gh", "repo", "list", name, "--limit", "50", "--json", "name,owner,url"])
+    repos_data = json.loads(repos_json)
+    selected = run_fzf([f"{r['owner']['login']}/{r['name']}" for r in repos_data], header=f"Repos in {name}")
+    if selected:
+        url = next(r['url'] for r in repos_data if f"{r['owner']['login']}/{r['name']}" == selected)
+        action = run_fzf(["📥 Clone", "🌐 Browser"], header="Action")
+        if "Clone" in action: subprocess.run(["git", "clone", url, str(REPO_DIR / selected.split("/")[-1])])
 
 def clone_repo():
-    url = input("Enter Repository URL (HTTPS or SSH): ").strip()
-    if url:
-        name = url.split("/")[-1].replace(".git", "")
-        dest = REPO_DIR / name
-        if not dest.exists():
-            print(f"{BLUE}Cloning into {dest}...{NC}")
-            res = subprocess.run(["git", "clone", url, str(dest)])
-            if res.returncode == 0:
-                repo_actions(str(dest))
-        else:
-            print(f"{YELLOW}Error: Directory already exists at {dest}{NC}")
-            time.sleep(2)
+    url = input("URL: ").strip()
+    if url: subprocess.run(["git", "clone", url], cwd=REPO_DIR)
 
 def create_new_repo():
-    name = input("Enter new repository name: ").strip()
+    name = input("Name: ").strip()
     if name:
         dest = REPO_DIR / name
         dest.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init"], cwd=dest)
-        (dest / "README.md").touch()
-        subprocess.run(["git", "add", "."], cwd=dest)
-        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=dest)
-        repo_actions(str(dest))
-
-def merge_branch():
-    if not CACHE_FILE.exists() or os.path.getsize(CACHE_FILE) == 0:
-        refresh_cache()
-        
-    try:
-        with open(CACHE_FILE, "r") as f:
-            all_repos = f.read().splitlines()
-    except FileNotFoundError:
-        return
-        
-    options = [f"{os.path.basename(r)}  ({r})" for r in all_repos if (Path(r) / ".git").exists()]
-            
-    selected_repo_str = run_fzf(options, header="Select repository to merge branches", height='60%', layout=None)
-    if not selected_repo_str:
-        return
-        
-    repo_path = selected_repo_str.split("  (")[-1].rstrip(")")
-    
-    branches = run_command(["git", "branch", "--format=%(refname:short)"], cwd=repo_path).splitlines()
-    if len(branches) <= 1:
-        print(f"{YELLOW}Only one branch exists. Nothing to merge.{NC}")
-        time.sleep(2)
-        return
-        
-    target = run_fzf(branches, header="STEP 1: Select branch to merge INTO", height='60%', layout=None)
-    if not target: return
-    
-    source = run_fzf([b for b in branches if b != target], header="STEP 2: Select branch to merge (source)", height='60%', layout=None)
-    if not source: return
-    
-    print(f"\n{BLUE}Merging {source} into {target}...{NC}")
-    subprocess.run(["git", "checkout", target], cwd=repo_path)
-    res = subprocess.run(["git", "merge", source, "--no-edit"], cwd=repo_path)
-    if res.returncode == 0:
-        print(f"\n{GREEN}✅ Merge successful!{NC}")
-    else:
-        print(f"\n{RED}❌ Merge failed - conflicts detected!{NC}")
-    input("\nPress Enter to continue...")
 
 def main_menu():
-    """Main application loop."""
+    start_pr_fetch()
     while True:
         clear_screen()
-        print(f"{BLUE}╔═══════════════════════════════════════════════════╗{NC}")
-        print(f"{BLUE}║{NC}           {BOLD}{WHITE}GITY{NC} {DIM}-{NC} {BOLD}Python TUI Hub{NC} {DIM}v{VERSION}{NC}             {BLUE}║{NC}")
-        print(f"{BLUE}╚═══════════════════════════════════════════════════╝{NC}\n")
-        print(f"  {BOLD}Status Indicators:{NC}  {GREEN}●{NC} Clean  {YELLOW}✎{NC} Changes  {CYAN}↑{NC} Ahead  {RED}↓{NC} Behind  {MAGENTA}↕{NC} Diverged\n")
-        
-        options = [
-            "📊 Dashboard (Repos Needing Work)",
-            "📂 Browse All Repositories",
-            "📅 Activity Timeline",
-            "⚡ Bulk Actions",
-            "🔍 Search Across Repos",
-            "🐙 GitHub Repos",
-            "🔀 Merge Branch",
-            "🔗 Clone Repository",
-            "✨ Create New Repository",
-            "🔄 Refresh Cache",
-            "↻ Update Gity",
-            "❌ Exit"
-        ]
-        
-        choice = run_fzf(options, header="Main Menu", height='50%', layout='reverse')
-        
-        if not choice or "❌" in choice:
-            sys.exit(0)
-        elif "📊" in choice: show_dashboard()
-        elif "📂" in choice: open_existing()
-        elif "📅" in choice: show_activity_timeline()
-        elif "⚡" in choice: bulk_actions()
-        elif "🔍" in choice: search_repos()
-        elif "🐙" in choice: github_repos()
-        elif "🔀" in choice: merge_branch()
-        elif "🔗" in choice: clone_repo()
-        elif "✨" in choice: create_new_repo()
-        elif "🔄" in choice: refresh_cache()
-        elif "↻" in choice:
-            print(f"{BLUE}Update Gity is handled by your system package manager or install script.{NC}")
-            time.sleep(2)
+        total_prs = sum(pr_counts.values())
+        pr_notifier = f" {RED}● {total_prs} PRs{NC}" if total_prs > 0 else ""
+        print(f"{BLUE}╔{box_draw(60, '═')}╗{NC}\n║  {BOLD}{WHITE}GITY{NC} {DIM}- Universal Git Hub{NC} {CYAN}v{VERSION}{NC} {' '*(28-len(VERSION))}║\n{BLUE}╚{box_draw(60, '═')}╝{NC}")
+        print(f"  {BOLD}Indicators:{NC} {GREEN}●{NC} Clean {YELLOW}✎{NC} Changes {CYAN}↑{NC} Ahead {RED}↓{NC} Behind\n")
+        options = ["📊 Dashboard", f"📥 Pull Requests{pr_notifier}", "📂 Browse Repos", "📅 Activity", "⚡ Bulk Actions", "🔍 Search", "🐙 GitHub Repos", "🔗 Clone", "✨ New Repo", "🔄 Refresh Cache", "❌ Exit"]
+        choice = run_fzf(options, header="MAIN MENU", height='50%')
+        if not choice or "❌" in choice: sys.exit(0)
+        elif "Dashboard" in choice: show_dashboard()
+        elif "Pull Requests" in choice: pull_requests_menu(); start_pr_fetch()
+        elif "Browse Repos" in choice: open_existing()
+        elif "Activity" in choice: show_activity_timeline()
+        elif "Bulk" in choice: bulk_actions()
+        elif "Search" in choice: search_repos()
+        elif "GitHub" in choice: github_repos()
+        elif "Clone" in choice: clone_repo()
+        elif "New Repo" in choice: create_new_repo()
+        elif "Refresh" in choice: refresh_cache()
 
 if __name__ == "__main__":
     if not shutil.which("fzf") or not shutil.which("git"):
-        print(f"{RED}Error: 'git' and 'fzf' are required to run Gity.{NC}")
+        print("Error: git and fzf required")
         sys.exit(1)
     main_menu()
