@@ -299,9 +299,9 @@ function Download-Gity {
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
     }
     
-    $gityFile = Join-Path $InstallDir "gity.ps1"
+    $gityFile = Join-Path $InstallDir "gity.sh"
     
-    if (Download-File -Url "$GityUrl/gity.ps1" -OutputPath $gityFile) {
+    if (Download-File -Url "$GityUrl/gity.sh" -OutputPath $gityFile) {
         Write-Success "Gity downloaded"
         return $true
     }
@@ -346,11 +346,11 @@ if (!(Download-Gity)) {
     exit 1
 }
 
-# Create gity.cmd wrapper (bypasses execution policy)
+# Create gity.cmd wrapper that runs bash script via Git Bash
 $cmdFile = Join-Path $InstallDir "gity.cmd"
-$cmdContent = "@echo off`npowershell -ExecutionPolicy Bypass -NoProfile -File `"%~dp0gity.ps1`" %*`n"
+$cmdContent = "@echo off`nsetlocal`nset `"BASH_PATH=%~dp0gity.sh`"`nfor /f `"delims=`" %%i in ('where bash.exe 2^>nul') do set `"BASH_EXE=%%i`"`nif not defined BASH_EXE (`n    echo Git Bash not found. Please install Git for Windows.`n    pause`n    exit /b 1`n)`n`"%BASH_EXE%`" `"%BASH_PATH%`"`nendlocal"
 Set-Content -Path $cmdFile -Value $cmdContent -Force -Encoding ASCII
-Write-Success "Created gity.cmd wrapper"
+Write-Success "Created gity.cmd wrapper (runs via Git Bash)"
 
 Add-ToPath $InstallDir
 Add-ToPath $BinDir
@@ -364,11 +364,8 @@ Write-Host ""
 Write-Host "Installed to: $InstallDir" -ForegroundColor White
 Write-Host ""
 Write-Host "To run Gity:" -ForegroundColor Cyan
-Write-Host "  1. Open a NEW terminal" -ForegroundColor Gray
+Write-Host "  1. Open a NEW terminal (CMD, PowerShell, or Git Bash)" -ForegroundColor Gray
 Write-Host "  2. Type: gity" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "Or run directly:" -ForegroundColor Cyan
-Write-Host "  gity" -ForegroundColor Yellow
-Write-Host ""
-Write-Host "Note: A gity.cmd wrapper was created to bypass execution policy." -ForegroundColor Gray
+Write-Host "Note: Runs via Git Bash - can access Windows folders (C:\Users\...)" -ForegroundColor Gray
 Write-Host ""
