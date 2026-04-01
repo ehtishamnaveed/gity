@@ -8,12 +8,12 @@
 
 # Enable script execution (required for Windows)
 try {
-    $currentPolicy = Get-ExecutionPolicy -Scope CurrentUser -ErrorAction SilentlyContinue
-    if ($currentPolicy -eq "Restricted" -or $currentPolicy -eq "AllSigned") {
-        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
-    }
+    Write-Step "Setting execution policy to RemoteSigned..."
+    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+    Write-Success "Execution policy set to RemoteSigned"
 } catch {
-    # If we can't change policy, continue anyway (might be running with -ExecutionPolicy Bypass)
+    Write-Warn "Could not set execution policy: $_"
+    Write-Warn "Scripts may need -ExecutionPolicy Bypass flag"
 }
 
 $InstallDir = Join-Path $env:LOCALAPPDATA "Programs\Gity"
