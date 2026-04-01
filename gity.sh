@@ -20,6 +20,11 @@ RECENT_FILE="$HOME/.cache/lazygit_recent"
 mkdir -p "$REPO_DIR" "$(dirname "$CACHE_FILE")"
 touch "$RECENT_FILE"
 
+if [ ! -s "$CACHE_FILE" ]; then
+    echo -e "${BLUE}First run - scanning for repositories...${NC}"
+    refresh_cache
+fi
+
 CLIPBOARD_TOOL=""
 copy_path() {
     if [ -z "$CLIPBOARD_TOOL" ]; then
@@ -462,7 +467,7 @@ github_repos() {
     if [ "$entity_type" = "user" ]; then
         repos=$(gh repo list "$entity_name" --limit 100 --json name,owner,url --jq '.[] | "\(.owner.login)/\(.name)|\(.url)"' 2>/dev/null)
     else
-        repos=$(gh api orgs/$entity_name/repos --jq '.[] | "\(.owner.login)/\(.name)|\(.url)"' 2>/dev/null)
+        repos=$(gh api "orgs/$entity_name/repos?per_page=100" --jq '.[] | "\(.owner.login)/\(.name)|\(.url)"' 2>/dev/null)
     fi
     
     if [ -z "$repos" ]; then
