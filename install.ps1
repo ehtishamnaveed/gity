@@ -31,6 +31,128 @@ function Check-Command {
     $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+# ============================================================
+# CURL SETUP - Windows has curl.exe in System32
+# ============================================================
+
+function Setup-Curl {
+    # Check for curl.exe explicitly (not PowerShell's curl alias)
+    $curlPath = Join-Path $env:SystemRoot "System32\curl.exe"
+    
+    if (Test-Path $curlPath) {
+        Write-Success "curl.exe found at $curlPath"
+        return $true
+    }
+    
+    # Also check if curl.exe is in PATH
+    $curlInPath = Get-Command "curl.exe" -ErrorAction SilentlyContinue
+    if ($curlInPath) {
+        Write-Success "curl.exe found in PATH"
+        return $true
+    }
+    
+    Write-Warn "curl.exe not found. Installing..."
+    
+    # Try winget first
+    if (Check-Command "winget") {
+        Write-Step "Installing curl via winget..."
+        winget install -e --id curl.curl --silent --accept-source-agreements 2>&1 | Out-Null
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Success "curl installed successfully"
+            return $true
+        }
+    }
+    
+    # Fallback: Download curl manually
+    Write-Warn "winget failed. Downloading curl manually..."
+    
+    $curlUrl = "https://curl.se/windows/dl-8.7.1_7/curl-8.7.1-win64-mingw.zip"
+    $tempZip = Join-Path $env:TEMP "curl-win64.zip"
+    $curlExtractDir = Join-Path $env:TEMP "curl-extract"
+    
+    try {
+        # Use PowerShell's built-in download
+        Invoke-WebRequest -Uri $curlUrl -UseBasicParsing -OutFile $tempZip
+        
+        # Extract
+        if (!(Test-Path $curlExtractDir)) {
+            New-Item -ItemType Directory -Path $curlExtractDir -Force | Out-Null
+        }
+        Expand-Archive -Path $tempZip -DestinationPath $curlExtractDir -Force
+        
+        # Copy curl.exe to a known location
+        $curlBinDir = Join-Path $InstallDir "bin"
+        if (!(Test-Path $curlBinDir)) {
+            New-Item -ItemType Directory -Path $curlBinDir -Force | Out-Null
+        }
+        
+        $curlExe = Get-ChildItem -Path $curlExtractDir -Recurse -Filter "curl.exe" | Select-Object -First 1
+        if ($curlExe) {
+            Copy-Item $curlExe.FullName (Join-Path $curlBinDir "curl.exe") -Force
+            Add-ToPath $curlBinDir
+            Write-Success "curl installed to $curlBinDir"
+            return $true
+        }
+    } catch {
+        Write-Err "Failed to download curl: $_"
+    } finally {
+        # Cleanup
+        if (Test-Path $tempZip) { Remove-Item $tempZip -Force }
+        if (Test-Path $curlExtractDir) { Remove-Item $curlExtractDir -Recurse -Force }
+    }
+    
+    Write-Err "Could not install curl. Please install manually:"
+    Write-Host "  winget install curl.curl" -ForegroundColor Gray
+    return $false
+}
+
+function Download-File {
+    param(
+        [string]$Url,
+        [string]$OutputPath
+    )
+    
+    # Use curl.exe for downloads (native Windows binary)
+    $result = & curl.exe -sSL -o $OutputPath $Url 2>&1
+    
+    if ($LASTEXITCODE -eq 0) {
+        return $true
+    } else {
+        Write-Warn "curl failed (exit code: $LASTEXITCODE), falling back to Invoke-WebRequest..."
+        try {
+            Invoke-WebRequest -Uri $Url -UseBasicParsing -OutFile $OutputPath
+            return $true
+        } catch {
+            Write-Err "Download failed: $_"
+            return $false
+        }
+    }
+}
+
+function Get-RemoteContent {
+    param([string]$Url)
+    
+    # Use curl.exe to fetch content
+    $result = & curl.exe -sSL $Url 2>&1
+    
+    if ($LASTEXITCODE -eq 0) {
+        return $result
+    } else {
+        Write-Warn "curl failed, falling back to Invoke-WebRequest..."
+        try {
+            return (Invoke-WebRequest -Uri $Url -UseBasicParsing).Content
+        } catch {
+            Write-Err "Failed to fetch content: $_"
+            return $null
+        }
+    }
+}
+
+# ============================================================
+# WINGET INSTALLER
+# ============================================================
+
 function Install-WithWinget {
     param(
         [string]$Name,
@@ -93,25 +215,23 @@ function Download-Gity {
     
     $gityFile = Join-Path $InstallDir "gity.ps1"
     
-    try {
-        Invoke-WebRequest -Uri "$GityUrl/gity.ps1" -UseBasicParsing -OutFile $gityFile
+    if (Download-File -Url "$GityUrl/gity.ps1" -OutputPath $gityFile) {
         Write-Success "Gity downloaded to $InstallDir"
         return $true
-    } catch {
-        Write-Err "Failed to download Gity: $_"
-        return $false
     }
+    return $false
 }
 
 function Save-Version {
-    try {
-        $version = (Invoke-WebRequest -Uri "$GityUrl/VERSION" -UseBasicParsing -TimeoutSec 5).Content.Trim()
+    $version = Get-RemoteContent -Url "$GityUrl/VERSION"
+    if ($version) {
+        $version = $version.Trim()
         if (!(Test-Path $CacheDir)) {
             New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
         }
         Set-Content -Path (Join-Path $CacheDir "VERSION") -Value $version -Force
         Write-Success "Version saved: $version"
-    } catch {
+    } else {
         Write-Warn "Could not fetch version info (will use default)"
     }
 }
@@ -125,6 +245,12 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  GITY - Windows Installer v1.0.0" -ForegroundColor White
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
+
+# Setup curl first
+Write-Step "Setting up curl..."
+if (!(Setup-Curl)) {
+    Write-Warn "curl setup failed, will use PowerShell fallback for downloads"
+}
 
 # Check winget
 Write-Step "Checking winget..."
