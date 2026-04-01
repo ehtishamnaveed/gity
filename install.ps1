@@ -359,7 +359,31 @@ if (!(Download-Gity)) {
 
 # Create gity.cmd wrapper that runs bash script via Git Bash
 $cmdFile = Join-Path $InstallDir "gity.cmd"
-$cmdContent = "@echo off`nsetlocal`nset `"BASH_PATH=%~dp0gity.sh`"`nfor /f `"delims=`" %%i in ('where bash.exe 2^>nul') do set `"BASH_EXE=%%i`"`nif not defined BASH_EXE (`n    echo Git Bash not found. Please install Git for Windows.`n    pause`n    exit /b 1`n)`n`"%BASH_EXE%`" `"%BASH_PATH%`"`nendlocal"
+$cmdContent = @"
+@echo off
+setlocal
+
+rem Try to find bash.exe in common Git Bash locations first
+if exist "C:\Program Files\Git\bin\bash.exe" (
+    set "BASH_EXE=C:\Program Files\Git\bin\bash.exe"
+) else if exist "C:\Program Files (x86)\Git\bin\bash.exe" (
+    set "BASH_EXE=C:\Program Files (x86)\Git\bin\bash.exe"
+) else (
+    rem Fall back to PATH search
+    for /f "delims=" %%%%i in ('where bash.exe 2^>nul') do set "BASH_EXE=%%%%i"
+)
+
+if not defined BASH_EXE (
+    echo Git Bash not found. Please install Git for Windows from:
+    echo https://git-scm.com/download/win
+    pause
+    exit /b 1
+)
+
+set "BASH_PATH=%~dp0gity.sh"
+"%BASH_EXE%" "%BASH_PATH%"
+endlocal
+"@
 Set-Content -Path $cmdFile -Value $cmdContent -Force -Encoding ASCII
 Write-Success "Created gity.cmd wrapper (runs via Git Bash)"
 
