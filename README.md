@@ -4,7 +4,7 @@
 
 No more hunting for repos across your filesystem. Gity automatically discovers all your Git repositories and brings them together with beautiful visualizations, status indicators, cross-repo search, bulk actions, and GitHub integration.
 
-**Available for Linux, macOS, and Windows (native!)**
+**Available for Linux, macOS, and Windows**
 
 ![Gity Screenshot](docs/screenshot.png)
 
@@ -12,7 +12,8 @@ No more hunting for repos across your filesystem. Gity automatically discovers a
 
 | Platform | Command |
 |----------|---------|
-| **Linux / macOS** | `curl -sSL https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.sh \| bash` |
+| **Linux** | `curl -sSL https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.sh \| bash` |
+| **macOS** | `curl -sSL https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.sh \| bash` |
 | **Windows** | `irm https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.ps1 \| iex` |
 
 That's it. One command per platform. Everything installs automatically.
@@ -43,12 +44,12 @@ Gity handles all dependencies automatically. Just run the installer and it insta
 
 ### What Gets Installed
 
-| Tool | Purpose | Install Method |
-|------|---------|----------------|
-| **git** | Version control | winget / apt / brew / pacman |
-| **fzf** | Fuzzy finder | winget / apt / brew / pacman |
-| **lazygit** | Terminal UI for Git | winget / apt / brew / pacman |
-| **gh** | GitHub CLI (optional) | winget / apt / brew / pacman |
+| Tool | Purpose | Linux | macOS | Windows |
+|------|---------|-------|-------|---------|
+| **git** | Version control | apt/pacman/dnf | brew | winget |
+| **fzf** | Fuzzy finder | apt/pacman/dnf | brew | GitHub API |
+| **lazygit** | Terminal UI for Git | apt/pacman/dnf | brew | GitHub API |
+| **gh** | GitHub CLI (optional) | apt/pacman/dnf | brew | GitHub API |
 
 ## Installation
 
@@ -68,9 +69,9 @@ After installation, make sure `~/.local/bin` is in your PATH.
 curl -sSL https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.sh | bash
 ```
 
-Make sure [Homebrew](https://brew.sh) is installed first. The installer uses Homebrew to install dependencies.
+Make sure [Homebrew](https://brew.sh) is installed first. The installer uses Homebrew to install all dependencies (git, fzf, lazygit, gh CLI).
 
-### Windows (Native)
+### Windows
 
 Open **PowerShell** (or Windows Terminal) and run:
 
@@ -79,19 +80,20 @@ irm https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.ps1 | i
 ```
 
 The installer will:
-1. Check for `winget` (Windows Package Manager)
-2. Auto-install: git, fzf, lazygit, and gh CLI
-3. Download Gity to `%LOCALAPPDATA%\Programs\Gity`
-4. Add to your PATH
-5. Ready to use!
+1. Set PowerShell execution policy to `RemoteSigned`
+2. Install **Git** via winget (`winget install --id Git.Git`)
+3. Install **fzf**, **lazygit**, and **gh CLI** from GitHub releases
+4. Download Gity to `%LOCALAPPDATA%\Programs\Gity`
+5. Create a `gity.cmd` wrapper for easy access
+6. Add to your PATH
 
-After installation, open a **new** terminal and run:
+After installation, open a **new** terminal (CMD, PowerShell, or Git Bash) and run:
 
-```powershell
+```cmd
 gity
 ```
 
-> **Note:** This is a native Windows version. No WSL or Git Bash required.
+> **Note:** Gity runs via Git Bash on Windows, which means it can access your Windows folders natively (`C:\Users\...`).
 
 ### Manual Install
 
@@ -103,7 +105,7 @@ chmod +x ~/.local/bin/gity
 
 ```powershell
 # Windows
-irm https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/gity.ps1 -OutFile "$env:LOCALAPPDATA\Programs\Gity\gity.ps1"
+irm https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/gity.sh -OutFile "$env:LOCALAPPDATA\Programs\Gity\gity.sh"
 ```
 
 ## Usage
@@ -114,7 +116,7 @@ Run Gity from your terminal:
 # Linux / macOS
 gity
 
-# Windows
+# Windows (CMD, PowerShell, or Git Bash)
 gity
 ```
 
@@ -172,9 +174,10 @@ After selecting a repo, you can:
 | Action | Description |
 |---|---|
 | **Open in Lazygit (TUI)** | Launch lazygit in that repository |
+| **Browse Files (fzf)** | Browse all repo files with fuzzy search and preview |
+| **Open in Default Editor** | Open repo using your `$EDITOR`, or your system's default |
 | **Open in File Manager** | Open repo folder in your file browser |
-| **Open in VS Code** | Open repo in VS Code (Windows) |
-| **Copy Path** | Copy the repo path to your clipboard |
+| **Copy Path to Clipboard** | Copy the repo path to your clipboard |
 
 ### Keyboard Navigation
 
@@ -214,12 +217,15 @@ Gity works with zero configuration, but you can customize:
 | `CACHE_FILE` | `~/.cache/lazygit_repos` | Repo discovery cache |
 | `RECENT_FILE` | `~/.cache/lazygit_recent` | Recently opened repos |
 
-### Windows (`gity.ps1`)
+### Windows
 
 | Variable | Default | Description |
 |---|---|---|
-| `$RepoDir` | `~/Documents/Github` | Where cloned repos are saved |
-| `$CacheDir` | `%APPDATA%/gity` | Cache directory |
+| `REPO_DIR` | `~/Documents/Github` | Where cloned repos are saved |
+| `CACHE_FILE` | `~/.cache/lazygit_repos` | Repo discovery cache |
+| `RECENT_FILE` | `~/.cache/lazygit_recent` | Recently opened repos |
+
+> **Note:** On Windows, paths are relative to your Git Bash home directory (usually `C:\Users\YourName`).
 
 ## Uninstall
 
