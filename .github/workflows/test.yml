@@ -77,41 +77,37 @@ jobs:
           $gitySh = Join-Path $env:LOCALAPPDATA "Programs\Gity\gity.sh"
           Write-Host "Testing gity.sh execution..."
           
-          # Run with a 10-second timeout and pipe empty input to exit immediately
-          $process = Start-Process -FilePath $bashExe.Source -ArgumentList $gitySh -NoNewWindow -PassThru -Wait
+          # Run in background, capture output, then kill after 10 seconds
+          $tempOut = Join-Path $env:TEMP "gity_output.txt"
+          $process = Start-Process -FilePath $bashExe.Source -ArgumentList "-c", "timeout 10 bash `"$gitySh`"" -NoNewWindow -PassThru -RedirectStandardOutput $tempOut
+          
+          # Wait for process to finish (timeout will kill it after 10s)
+          $process.WaitForExit(30000) | Out-Null
           Write-Host "gity.sh exited with code: $($process.ExitCode)"
           
-          # Also test gity.cmd wrapper
-          Write-Host "Testing gity.cmd wrapper..."
-          $process2 = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "gity" -NoNewWindow -PassThru -Wait
-          Write-Host "gity.cmd exited with code: $($process2.ExitCode)"
-      
-      - name: Test running gity
-        shell: pwsh
-        run: |
-          # Refresh PATH
-          $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
+          # Check output for expected content
+          if (Test-Path $tempOut) {
+              $output = Get-Content $tempOut -Raw
+              Write-Host "gity output preview:"
+              Write-Host $output
+              
+              if ($output -match "GITY") {
+                  Write-Host "OK: gity.sh started and rendered UI"
+              } else {
+                  Write-Host "WARN: gity.sh ran but output may be incomplete"
+              }
+          }
           
-          # Find Git Bash
-          $bashExe = Get-Command bash.exe -ErrorAction SilentlyContinue
-          if (!$bashExe) {
-              Write-Host "FAIL: bash.exe not found"
+          # Test gity.cmd wrapper syntax
+          Write-Host "Testing gity.cmd wrapper..."
+          $gityCmd = Join-Path $env:LOCALAPPDATA "Programs\Gity\gity.cmd"
+          $cmdContent = Get-Content $gityCmd -Raw
+          if ($cmdContent -match "bash.exe" -and $cmdContent -match "gity.sh") {
+              Write-Host "OK: gity.cmd wrapper is valid"
+          } else {
+              Write-Host "FAIL: gity.cmd wrapper is malformed"
               exit 1
           }
-          Write-Host "Found bash.exe at: $($bashExe.Source)"
-          
-          # Run gity.sh with timeout to verify it starts
-          $gitySh = Join-Path $env:LOCALAPPDATA "Programs\Gity\gity.sh"
-          Write-Host "Testing gity.sh execution..."
-          
-          # Run with a 10-second timeout and pipe empty input to exit immediately
-          $process = Start-Process -FilePath $bashExe.Source -ArgumentList $gitySh -NoNewWindow -PassThru -Wait
-          Write-Host "gity.sh exited with code: $($process.ExitCode)"
-          
-          # Also test gity.cmd wrapper
-          Write-Host "Testing gity.cmd wrapper..."
-          $process2 = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "gity" -NoNewWindow -PassThru -Wait
-          Write-Host "gity.cmd exited with code: $($process2.ExitCode)"
 
   test-linux:
     runs-on: ubuntu-latest
