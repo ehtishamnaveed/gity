@@ -249,23 +249,9 @@ search_repos() {
     local temp_results
     temp_results=$(mktemp)
     
-    local found=0
-    while IFS= read -r repo; do
-        if [ -d "$repo/.git" ]; then
-            local results
-            results=$(git -C "$repo" grep -n --heading --line-number --column "$query" 2>/dev/null || true)
-            if [ -n "$results" ]; then
-                local name
-                name=$(basename "$repo")
-                echo -e "${CYAN}${name}${NC}:" >> "$temp_results"
-                echo "$results" | sed "s/^/  /" >> "$temp_results"
-                echo "" >> "$temp_results"
-                found=$((found + 1))
-            fi
-        fi
-    done <<< "$all_repos"
+    echo "$all_repos" | xargs -P 10 -I {} bash -c 'if [ -d "{}/.git" ]; then git -C "{}" grep -n --heading --line-number --column "'"$query"'" 2>/dev/null | while read line; do echo "$(basename "{}"): $line"; done; fi' > "$temp_results" 2>/dev/null || true
     
-    if [ "$found" -eq 0 ]; then
+    if [ ! -s "$temp_results" ]; then
         echo -e "${YELLOW}No results found for: $query${NC}"
         rm -f "$temp_results"
         sleep 2
@@ -278,9 +264,9 @@ search_repos() {
     
     if [ -n "$selected" ]; then
         local repo_name
-        repo_name=$(echo "$selected" | head -1 | sed 's/:$//' | tr -d '[:space:]')
+        repo_name=$(echo "$selected" | cut -d':' -f1 | tr -d '[:space:]')
         local repo_path
-        repo_path=$(grep -F "/${repo_name}" "$CACHE_FILE" | awk -F/ '{if ($NF == "'"${repo_name}"'") print}' | head -1)
+        repo_path=$(grep -F "/${repo_name}" "$CACHE_FILE" | head -1)
         if [ -n "$repo_path" ]; then
             repo_actions "$repo_path"
         fi
