@@ -729,7 +729,54 @@ def create_new_repo():
         dest.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init"], cwd=dest)
 
+def check_gh_auth():
+    """Check if user is logged in to GitHub CLI, prompt login if not."""
+    if not shutil.which("gh"):
+        print(f"{RED}gh CLI is not installed.{NC}")
+        print(f"{YELLOW}Installing gh CLI...{NC}")
+        if sys.platform == "linux":
+            run_command(["sudo", "apt", "install", "gh"], capture=False)
+        elif sys.platform == "darwin":
+            run_command(["brew", "install", "gh"], capture=False)
+        else:
+            print(f"{YELLOW}Please install gh from: https://github.com/cli/cli{NC}")
+            time.sleep(3)
+            return False
+    
+    result = run_command(["gh", "auth", "status"])
+    if "Logged in" in result:
+        if "delete_repo" in result:
+            print(f"{GREEN}✓ Logged into GitHub (with delete permission){NC}")
+        else:
+            print(f"{GREEN}✓ Logged into GitHub{NC}")
+            print(f"{YELLOW}Requesting delete_repo permission...{NC}")
+            res = run_command(["gh", "auth", "refresh", "-h", "github.com", "-s", "delete_repo"], capture=False)
+            if res == 0:
+                print(f"{GREEN}✓ Delete permission granted!{NC}")
+            else:
+                print(f"{YELLOW}⚠ Could not add delete permission automatically")
+                print(f"  You can still delete repos manually on GitHub web")
+        time.sleep(2)
+        return True
+    
+    print(f"{YELLOW}You are not logged into GitHub.{NC}")
+    print(f"{BLUE}Starting GitHub login...{NC}\n")
+    print(f"{DIM}Note: You'll need to re-authenticate to add delete_repo permission after initial login.{NC}\n")
+    
+    run_command(["gh", "auth", "login", "-h", "github.com", "-s", "repo", "-s", "read:org", "-w"], capture=False)
+    
+    result = run_command(["gh", "auth", "status"])
+    if "Logged in" in result:
+        print(f"{GREEN}✓ Login successful!{NC}")
+        time.sleep(2)
+        return True
+    else:
+        print(f"{RED}Login failed or cancelled.{NC}")
+        time.sleep(2)
+        return False
+
 def main_menu():
+    check_gh_auth()
     start_pr_fetch()
     while True:
         clear_screen()
@@ -745,7 +792,7 @@ def main_menu():
         """)
         
         print(f"  {BOLD}Indicators:{NC} {GREEN}●{NC} Clean {YELLOW}✎{NC} Changes {CYAN}↑{NC} Ahead {RED}↓{NC} Behind\n")
-        options = ["📊 Dashboard", "📥 Pull Requests", "📂 Browse Repos", "📅 Activity", "⚡ Bulk Actions", "🔍 Search", "🐙 GitHub Repos", "🔗 Clone", "✨ New Repo", "🗑️ Delete GitHub Repo", "🔄 Refresh Cache", "❌ Exit"]
+        options = ["📊 Dashboard", "📥 Pull Requests", "📂 Browse Repos", "📅 Activity", "⚡ Bulk Actions", "🔍 Search", "🐙 GitHub Repos", "🔗 Clone", "✨ New Repo", "☠️ DELETE GitHub REPO", "🔄 Refresh Cache", "❌ Exit"]
         choice = run_fzf(options, header="MAIN MENU", height='50%', reverse=True)
         if not choice or "❌" in choice: sys.exit(0)
         elif "Dashboard" in choice: show_dashboard()
@@ -754,10 +801,10 @@ def main_menu():
         elif "Activity" in choice: show_activity_timeline()
         elif "Bulk" in choice: bulk_actions()
         elif "Search" in choice: search_repos()
-        elif "GitHub" in choice: github_repos()
+        elif "GitHub Repos" in choice: github_repos()
         elif "Clone" in choice: clone_repo()
         elif "New Repo" in choice: create_new_repo()
-        elif "Delete GitHub" in choice: delete_github_repo()
+        elif "DELETE GitHub" in choice: delete_github_repo()
         elif "Refresh" in choice: refresh_cache()
 
 if __name__ == "__main__":
