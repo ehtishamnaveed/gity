@@ -326,7 +326,7 @@ def open_in_editor(repo_path):
 
 def repo_actions(repo_path):
     name = os.path.basename(repo_path)
-    actions = ["🚀 Open in Lazygit (TUI)", "📁 Browse Files (fzf)", "📝 Open in Default Editor", "📂 Open in File Manager", "🔀 Sync with GitHub (Pull/Push)", "📥 Create Pull Request", "🗑️ Delete Repository", "🔙 Back to Gity"]
+    actions = ["🚀 Open in Lazygit (TUI)", "📁 Browse Files (fzf)", "📝 Open in Default Editor", "📂 Open in File Manager", "🔀 Sync with GitHub (Pull/Push)", "📥 Create Pull Request", "🌿 Branch Manager", "🗑️ Delete Repository", "🔙 Back to Gity"]
     while True:
         clear_screen()
         status = get_repo_status_simple(repo_path)
@@ -338,6 +338,8 @@ def repo_actions(repo_path):
             git_ls = subprocess.Popen(["git", "ls-files"], cwd=repo_path, stdout=subprocess.PIPE, text=True)
             subprocess.run(['fzf', '--height', '100%', '--border', '--preview', f'cat {repo_path}/{{}}'], stdin=git_ls.stdout)
         elif "Editor" in choice: open_in_editor(repo_path)
+        elif "Branch" in choice:
+            branch_menu(repo_path)
         elif "Manager" in choice:
             if sys.platform == 'darwin': subprocess.run(['open', repo_path])
             elif sys.platform == 'win32': os.startfile(repo_path)
@@ -346,6 +348,8 @@ def repo_actions(repo_path):
             sync_menu(repo_path)
         elif "Create" in choice:
             create_pr_menu(repo_path)
+        elif "Branch" in choice:
+            branch_menu(repo_path)
         elif "Delete" in choice:
             confirm = input(f"Delete '{name}'? This will remove ALL local files. Type 'yes' to confirm: ")
             if confirm.lower() == 'yes':
@@ -455,6 +459,97 @@ def create_pr_menu(repo_path):
         print(f"{RED}✗ Failed to create PR.{NC}")
     time.sleep(2)
 
+def branch_menu(repo_path):
+    """Manage branches - delete, sync with remote."""
+    name = os.path.basename(repo_path)
+    remote = run_command(["git", "remote", "get-url", "origin"], cwd=repo_path)
+    
+    if not remote or "github.com" not in remote:
+        print(f"{RED}No GitHub remote found.{NC}")
+        time.sleep(2)
+        return
+    
+    while True:
+        clear_screen()
+        print(f"====================================================\n  {BOLD}Branch Manager: {name}{NC}\n====================================================\n")
+        
+        action_opts = ["📋 List Branches", "🗑️ Delete Local Branch", "🗑️ Delete Remote Branch", "🔄 Delete Merged Branches", "🔙 Back"]
+        choice = run_fzf(action_opts, header="Branch Actions", height='30%')
+        
+        if not choice or "Back" in choice:
+            break
+        elif "List" in choice:
+            clear_screen()
+            local = run_command(["git", "branch"], cwd=repo_path)
+            remote_branches = run_command(["git", "branch", "-r"], cwd=repo_path)
+            print(f"{BOLD}Local Branches:{NC}\n{local}\n")
+            print(f"{BOLD}Remote Branches:{NC}\n{remote_branches}")
+            print(f"\n{DIM}Press Enter to return...{NC}")
+            input()
+        elif "Delete Local" in choice:
+            branches = run_command(["git", "branch"], cwd=repo_path)
+            branch_list = [b.strip() for b in branches.splitlines() if b.strip()]
+            selected = run_fzf(branch_list, header="Select branches to delete (TAB)", height='60%', multi=True)
+            if not selected:
+                continue
+            to_delete = selected.splitlines()
+            for branch in to_delete:
+                if branch in ["main", "master"]:
+                    print(f"{YELLOW}Skipping {branch} (main/master){NC}")
+                    continue
+                res = run_command(["git", "branch", "-d", branch], cwd=repo_path, capture=False)
+                if res == 0:
+                    print(f"{GREEN}✓ Deleted: {branch}{NC}")
+                else:
+                    print(f"{RED}✗ Failed to delete: {branch}{NC}")
+            time.sleep(2)
+        elif "Delete Remote" in choice:
+            r_branches = run_command(["git", "branch", "-r"], cwd=repo_path)
+            if not r_branches:
+                print(f"{YELLOW}No remote branches found.{NC}")
+                time.sleep(2)
+                continue
+            
+            remote_list = [b.replace("origin/", "").strip() for b in r_branches.splitlines() if b.strip() and "origin/" in b]
+            selected = run_fzf(remote_list, header="Select remote branches to delete (TAB)", height='60%', multi=True)
+            if not selected:
+                continue
+            
+            to_delete = selected.splitlines()
+            for branch in to_delete:
+                if branch in ["main", "master"]:
+                    print(f"{YELLOW}Skipping {branch} (main/master){NC}")
+                    continue
+                res = run_command(["git", "push", "origin", "--delete", branch], cwd=repo_path, capture=False)
+                if res == 0:
+                    print(f"{GREEN}✓ Deleted remote: {branch}{NC}")
+                else:
+                    print(f"{RED}✗ Failed to delete: {branch}{NC}")
+            time.sleep(2)
+        elif "Delete Merged" in choice:
+            print(f"{BLUE}Finding merged branches...{NC}")
+            merged = run_command(["git", "branch", "--merged"], cwd=repo_path)
+            if not merged:
+                print(f"{YELLOW}No merged branches found.{NC}")
+                time.sleep(2)
+                continue
+            
+            branch_list = [b.strip() for b in merged.splitlines() if b.strip() and b.strip() not in ["main", "master"]]
+            if not branch_list:
+                print(f"{YELLOW}No mergeable branches found.{NC}")
+                time.sleep(2)
+                continue
+            
+            selected = run_fzf(branch_list, header="Select branches to delete (TAB)", multi=True, height='60%')
+            if not selected:
+                continue
+            
+            to_delete = selected.splitlines()
+            for branch in to_delete:
+                run_command(["git", "branch", "-d", branch], cwd=repo_path, capture=False)
+            print(f"{GREEN}✓ Deleted {len(to_delete)} branch(es).{NC}")
+            time.sleep(2)
+
 def open_existing():
     if not CACHE_FILE.exists(): refresh_cache()
     
@@ -468,9 +563,14 @@ def open_existing():
     combined = []
     seen = set()
     for r in recent + repos:
-        if r and r not in seen:
+        if r and r not in seen and os.path.isdir(r):
             combined.append(r)
             seen.add(r)
+    
+    if not combined:
+        print(f"{YELLOW}No repositories found on disk.{NC}")
+        time.sleep(2)
+        return
             
     options = []
     for r in combined:
@@ -548,6 +648,56 @@ def bulk_actions():
         elif "Status" in action: subprocess.run(["git", "status", "-s"], cwd=r)
     input("\nDone. Press Enter...")
 
+def delete_github_repo():
+    """Delete a repository from GitHub."""
+    if not shutil.which("gh"):
+        print(f"{RED}gh CLI is required.{NC}")
+        time.sleep(2)
+        return
+    
+    print(f"{BLUE}Fetching your repositories...{NC}")
+    user = run_command(["gh", "api", "user", "--jq", ".login"])
+    repos_json = run_command(["gh", "repo", "list", user, "--limit", "50", "--json", "name,owner"])
+    if not repos_json:
+        print(f"{RED}No repositories found.{NC}")
+        time.sleep(2)
+        return
+    
+    repos_data = json.loads(repos_json)
+    repo_opts = [f"{r['owner']['login']}/{r['name']}" for r in repos_data]
+    selected = run_fzf(repo_opts, header="Select repository to DELETE", height='60%')
+    
+    if not selected:
+        return
+    
+    clear_screen()
+    print(f"{RED}⚠️  WARNING: You are about to DELETE a repository!{NC}")
+    print(f"{RED}This action is IRREVERSIBLE and will delete all data.{NC}\n")
+    print(f"Repository: {RED}{selected}{NC}\n")
+    
+    confirm = input(f"Type '{selected}' to confirm deletion: ")
+    
+    if confirm != selected:
+        print(f"{YELLOW}Deletion cancelled.{NC}")
+        time.sleep(2)
+        return
+    
+    print(f"{RED}Deleting repository...{NC}")
+    res = run_command(["gh", "repo", "delete", selected, "--yes"], capture=False)
+    
+    if res == 0:
+        print(f"{GREEN}✓ Repository '{selected}' deleted successfully.{NC}")
+        with open(CACHE_FILE, "r") as f:
+            repos = f.read().splitlines()
+        repos = [r for r in repos if selected.split("/")[-1] not in r]
+        with open(CACHE_FILE, "w") as f:
+            f.write("\n".join(repos))
+    else:
+        print(f"{RED}✗ Failed to delete repository.{NC}")
+        print(f"{YELLOW}Note: You need 'delete_repo' scope to delete repos.{NC}")
+        print(f"{YELLOW}Run: gh auth refresh -h github.com -s delete_repo{NC}")
+    time.sleep(3)
+
 def github_repos():
     if not shutil.which("gh"): print("gh CLI missing"); return
     
@@ -583,26 +733,23 @@ def main_menu():
     start_pr_fetch()
     while True:
         clear_screen()
-        total_prs = sum(pr_counts.values())
-        pr_notifier = f" {RED}● {total_prs} PRs{NC}" if total_prs > 0 else ""
-        
         print(f"""{BLUE}
- ██████╗ ██╗████████╗██╗   ██╗
-██╔════╝ ██║╚══██╔══╝╚██╗ ██╔╝
-██║  ███╗██║   ██║    ╚████╔╝ 
-██║   ██║██║   ██║     ╚██╔╝  
-╚██████╔╝██║   ██║      ██║   
- ╚═════╝ ╚═╝   ╚═╝      ╚═╝   
+  ██████╗ ██╗████████╗██╗   ██╗
+ ██╔════╝ ██║╚══██╔══╝╚██╗ ██╔╝
+ ██║  ███╗██║   ██║    ╚████╔╝ 
+ ██║   ██║██║   ██║     ╚██╔╝  
+ ╚██████╔╝██║   ██║      ██║   
+  ╚═════╝ ╚═╝   ╚═╝      ╚═╝   
 {NC}
         {DIM}— Universal Git Hub v{VERSION} —{NC}
         """)
         
         print(f"  {BOLD}Indicators:{NC} {GREEN}●{NC} Clean {YELLOW}✎{NC} Changes {CYAN}↑{NC} Ahead {RED}↓{NC} Behind\n")
-        options = ["📊 Dashboard", f"📥 Pull Requests{pr_notifier}", "📂 Browse Repos", "📅 Activity", "⚡ Bulk Actions", "🔍 Search", "🐙 GitHub Repos", "🔗 Clone", "✨ New Repo", "🔄 Refresh Cache", "❌ Exit"]
+        options = ["📊 Dashboard", "📥 Pull Requests", "📂 Browse Repos", "📅 Activity", "⚡ Bulk Actions", "🔍 Search", "🐙 GitHub Repos", "🔗 Clone", "✨ New Repo", "🗑️ Delete GitHub Repo", "🔄 Refresh Cache", "❌ Exit"]
         choice = run_fzf(options, header="MAIN MENU", height='50%', reverse=True)
         if not choice or "❌" in choice: sys.exit(0)
         elif "Dashboard" in choice: show_dashboard()
-        elif "Pull Requests" in choice: pull_requests_menu(); start_pr_fetch()
+        elif "Pull Requests" in choice: pull_requests_menu()
         elif "Browse Repos" in choice: open_existing()
         elif "Activity" in choice: show_activity_timeline()
         elif "Bulk" in choice: bulk_actions()
@@ -610,6 +757,7 @@ def main_menu():
         elif "GitHub" in choice: github_repos()
         elif "Clone" in choice: clone_repo()
         elif "New Repo" in choice: create_new_repo()
+        elif "Delete GitHub" in choice: delete_github_repo()
         elif "Refresh" in choice: refresh_cache()
 
 if __name__ == "__main__":
