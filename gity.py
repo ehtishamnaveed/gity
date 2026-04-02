@@ -5,8 +5,14 @@ import sys
 import time
 import json
 import threading
+import io
 from pathlib import Path
 from datetime import datetime, timedelta
+
+# Force UTF-8 output on Windows
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # Color constants for terminal output
 RED = "\033[0;31m"
@@ -29,7 +35,7 @@ RECENT_FILE = CACHE_DIR / "lazygit_recent"
 CONFIG_DIR = HOME / ".config" / "gity"
 VERSION_FILE = CONFIG_DIR / "VERSION"
 
-VERSION = "1.3.3"
+VERSION = "1.3.4"
 
 # Global state for background PR fetching
 pr_counts = {}

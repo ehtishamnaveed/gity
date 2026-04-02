@@ -36,7 +36,8 @@ def create_launcher_windows(bin_dir, install_dir):
     launcher = bin_dir / "gity.cmd"
 
     # Write in binary mode to ensure exact \r\n line endings
-    content = f'@echo off\r\n"{python_exe}" "{gity_path}" %*\r\n'
+    # Force UTF-8 encoding for emoji support
+    content = f'@echo off\r\nchcp 65001 >nul\r\nset PYTHONIOENCODING=utf-8\r\nset PYTHONUTF8=1\r\n"{python_exe}" "{gity_path}" %*\r\n'
 
     with open(launcher, "wb") as f:
         f.write(content.encode("utf-8"))
