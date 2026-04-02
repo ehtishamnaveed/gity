@@ -29,7 +29,7 @@ RECENT_FILE = CACHE_DIR / "lazygit_recent"
 CONFIG_DIR = HOME / ".config" / "gity"
 VERSION_FILE = CONFIG_DIR / "VERSION"
 
-VERSION = "1.3.1"
+VERSION = "1.3.2"
 
 # Global state for background PR fetching
 pr_counts = {}
@@ -907,9 +907,14 @@ def check_for_update():
                 if remote_version != VERSION:
                     return True, remote_version
                 return False, VERSION
-    except Exception:
-        pass
-    return False, VERSION
+        print(f"{YELLOW}⚠ Could not find VERSION in remote file{NC}")
+        return False, VERSION
+    except urllib.error.URLError as e:
+        print(f"{YELLOW}⚠ Update check failed: {e.reason}{NC}")
+        return False, VERSION
+    except Exception as e:
+        print(f"{YELLOW}⚠ Update check failed: {e}{NC}")
+        return False, VERSION
 
 def update_gity():
     """Download and apply the latest gity.py and launcher."""
