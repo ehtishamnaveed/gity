@@ -16,14 +16,13 @@ No more hunting for repos across your filesystem. Gity automatically discovers a
 
 ## Quick Install (Universal)
 
-Open your terminal (PowerShell on Windows, or Bash/Zsh on Mac/Linux) and run:
+Open your terminal (CMD/PowerShell on Windows, or Bash/Zsh on Mac/Linux) and run:
 
 ```bash
-python3 -c "$(curl -fsSL https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.py)"
+python -c "import urllib.request; exec(urllib.request.urlopen('https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/install.py').read())"
 ```
-*(Windows users: if `python3` isn't found, use `python`)*
 
-That's it. One command. Everything installs and sets up your PATH automatically.
+That's it. One command works on **Windows, macOS, and Linux**. Everything installs and sets up your PATH automatically.
 
 ---
 
