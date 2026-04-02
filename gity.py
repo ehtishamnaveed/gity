@@ -29,7 +29,7 @@ RECENT_FILE = CACHE_DIR / "lazygit_recent"
 CONFIG_DIR = HOME / ".config" / "gity"
 VERSION_FILE = CONFIG_DIR / "VERSION"
 
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 
 # Global state for background PR fetching
 pr_counts = {}
@@ -900,7 +900,7 @@ def check_for_update():
     """Check if a newer version of gity.py is available."""
     try:
         import urllib.request
-        remote = urllib.request.urlopen(INSTALLER_URL, timeout=5).read().decode()
+        remote = urllib.request.urlopen(UPDATE_URL, timeout=5).read().decode()
         for line in remote.splitlines():
             if line.startswith("VERSION = "):
                 remote_version = line.split('"')[1]

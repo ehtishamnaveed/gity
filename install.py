@@ -35,11 +35,11 @@ def create_launcher_windows(bin_dir, install_dir):
     gity_path = install_dir / "gity.py"
     launcher = bin_dir / "gity.cmd"
 
-    # \r\n line endings are required for Windows batch files
+    # Write in binary mode to ensure exact \r\n line endings
     content = f'@echo off\r\n"{python_exe}" "{gity_path}" %*\r\n'
 
-    with open(launcher, "w", newline="") as f:
-        f.write(content)
+    with open(launcher, "wb") as f:
+        f.write(content.encode("utf-8"))
 
     print_color(f"Created Windows launcher: {launcher}", GREEN)
     return launcher
