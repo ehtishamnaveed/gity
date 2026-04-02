@@ -32,7 +32,7 @@ def find_python():
 def create_launcher_windows(bin_dir, install_dir):
     """Create a .cmd launcher for Windows (more reliable than .bat)."""
     python_exe = find_python()
-    gity_path = install_dir / "gity.py"
+    gity_path = install_dir / "windows.py"
     launcher = bin_dir / "gity.cmd"
 
     # Write in binary mode to ensure exact \r\n line endings
@@ -96,18 +96,22 @@ def add_to_path(bin_dir):
                     added = True
         return added
 
-def download_gity_py(install_dir):
-    """Download gity.py from GitHub using only the stdlib."""
-    url = "https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/gity.py"
-    dest = install_dir / "gity.py"
+def download_gity_py(install_dir, is_windows=False):
+    """Download gity.py (or windows.py) from GitHub using only the stdlib."""
+    if is_windows:
+        url = "https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/windows.py"
+        dest = install_dir / "windows.py"
+    else:
+        url = "https://raw.githubusercontent.com/ehtishamnaveed/Gity/master/gity.py"
+        dest = install_dir / "gity.py"
 
     try:
         import urllib.request
         urllib.request.urlretrieve(url, dest)
-        print_color(f"Downloaded gity.py to {dest}", GREEN)
+        print_color(f"Downloaded {dest.name} to {dest}", GREEN)
         return True
     except Exception as e:
-        print_color(f"Failed to download gity.py: {e}", RED)
+        print_color(f"Failed to download {dest.name}: {e}", RED)
         return False
 
 def install():
@@ -119,10 +123,11 @@ def install():
 
     system = platform.system()
 
-    if not download_gity_py(install_dir):
+    is_windows = system == "Windows"
+    if not download_gity_py(install_dir, is_windows=is_windows):
         sys.exit(1)
 
-    if system == "Windows":
+    if is_windows:
         create_launcher_windows(bin_dir, install_dir)
     else:
         create_launcher_unix(bin_dir, install_dir)

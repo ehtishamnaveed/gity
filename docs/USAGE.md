@@ -6,6 +6,29 @@
 gity
 ```
 
+## Platform-Specific Versions
+
+Gity ships with two versions:
+
+- **`gity.py`** — Universal version for Linux/macOS
+- **`windows.py`** — Windows-optimized version with built-in dependency checker
+
+The installer automatically detects your OS and installs the correct version. Both are launched with the same `gity` command.
+
+### Windows Dependency Checker
+
+When you run `gity` on Windows for the first time, it checks for required tools:
+
+- **git** (required)
+- **fzf** (required)
+- **gh CLI** (required for GitHub features)
+- **lazygit** (optional)
+
+If anything is missing, you'll be prompted to install it via:
+1. **winget** (recommended, built into Windows 10/11)
+2. **Chocolatey** (alternative package manager)
+3. **Manual download links**
+
 ## Main Menu Overview
 
 Gity's main menu provides quick access to all features:

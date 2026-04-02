@@ -24,6 +24,9 @@ python -c "import urllib.request; exec(urllib.request.urlopen('https://raw.githu
 
 That's it. One command works on **Windows, macOS, and Linux**. Everything installs and sets up your PATH automatically.
 
+- **Windows**: Installs `windows.py` (with built-in dependency checker that verifies git, fzf, gh, and lazygit before running)
+- **Linux/macOS**: Installs `gity.py` (universal version)
+
 ---
 
 ## Features
@@ -50,6 +53,9 @@ Gity requires **Python 3.6+** and two external TUI tools:
 1.  **git**
 2.  **fzf** (Fuzzy Finder)
 3.  **lazygit** (Optional but recommended)
+4.  **gh CLI** (Optional, for GitHub integration)
+
+> **Windows users**: The installer automatically downloads `windows.py` which includes a built-in dependency checker. If any tools are missing, it will offer to install them via winget or Chocolatey.
 
 ## Installation
 
@@ -62,15 +68,23 @@ python3 -c "$(curl -fsSL https://raw.githubusercontent.com/ehtishamnaveed/Gity/m
 ```
 
 The installer will:
-1. Create a dedicated folder for Gity in your local AppData (Windows) or .local/share (Linux/Mac)
-2. Install the `gity` command to your PATH
-3. Handle all OS-specific configuration automatically
+1. Detect your OS (Windows/Linux/macOS)
+2. Download the correct version (`windows.py` for Windows, `gity.py` for others)
+3. Create a dedicated folder in your local AppData (Windows) or .local/share (Linux/Mac)
+4. Install the `gity` command to your PATH
+5. Handle all OS-specific configuration automatically
 
 ### The Manual Way
 
+**Windows:**
+1.  Download `windows.py` to a folder of your choice.
+2.  Add that folder to your system PATH.
+3.  (Optional) Create a `gity.cmd` file: `@echo off && python "path\to\windows.py" %*`
+
+**Linux/macOS:**
 1.  Download `gity.py` to a folder of your choice.
 2.  Add that folder to your system PATH.
-3.  (Optional) Create an alias or batch file to run `python gity.py` via the keyword `gity`.
+3.  (Optional) Create an alias: `alias gity='python3 path/to/gity.py'`
 
 ## Usage
 
