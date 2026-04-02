@@ -818,10 +818,13 @@ def github_repos():
     repos_json = run_command(["gh", "repo", "list", name, "--limit", "100", "--json", "name,owner,url,description,stargazerCount,forkCount,isPrivate,primaryLanguage,updatedAt"])
     repos_data = json.loads(repos_json)
 
-    selected = run_fzf([f"{r['owner']['login']}/{r['name']}" for r in repos_data], header=f"Repos in {name}")
+    repo_names = [f"{r['owner']['login']}/{r['name']}" for r in repos_data]
+    selected = run_fzf(repo_names, header=f"Repos in {name}")
     if selected:
-        repo = next(r for r in repos_data if f"{r['owner']['login']}/{r['name']}" == selected)
-        github_repo_actions(repo)
+        for i, rn in enumerate(repo_names):
+            if rn == selected:
+                github_repo_actions(repos_data[i])
+                return
 
 def clone_repo():
     url = input("URL: ").strip()
