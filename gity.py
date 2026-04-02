@@ -29,7 +29,7 @@ RECENT_FILE = CACHE_DIR / "lazygit_recent"
 CONFIG_DIR = HOME / ".config" / "gity"
 VERSION_FILE = CONFIG_DIR / "VERSION"
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 # Global state for background PR fetching
 pr_counts = {}
